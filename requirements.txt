@@ -1,0 +1,8 @@
+ib_insync
+pandas
+numpy
+python-dotenv
+PyYAML
+pytest
+yfinance
+scipy
