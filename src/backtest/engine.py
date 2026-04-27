@@ -117,7 +117,7 @@ class SyntheticOptionsBacktestEngine:
 
     def _maybe_enter_trade(self, ticker: str, rows: pd.DataFrame) -> BacktestTrade | None:
         row = rows.iloc[-1]
-        entry_config = self.config.get("entry", {})
+        entry_config = self.config.get("daily_strategy", self.config.get("entry", {}))
         signal = calculate_momentum(ticker, rows, self.config)
         if signal is None:
             return None

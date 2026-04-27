@@ -5,9 +5,15 @@ from dataclasses import asdict
 
 import pandas as pd
 
-from src.backtest.comparison import compare_backtest_results, save_comparison_outputs
+from src.backtest.comparison import (
+    compare_backtest_results,
+    compare_static_vs_sector_rotation,
+    save_comparison_outputs,
+    save_sector_comparison_outputs,
+)
 from src.backtest.engine import SyntheticOptionsBacktestEngine
 from src.backtest.multi_timeframe_engine import MultiTimeframeSyntheticOptionsBacktestEngine
+from src.backtest.sector_rotation_engine import SectorRotationBacktestEngine
 from src.config import load_config
 from src.ibkr_client import IBKRClient
 from src.models import OptionCandidate, MomentumSignal
@@ -44,11 +50,17 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross Regime Alpha Options Overlay")
     parser.add_argument("--mode", choices=["scan", "backtest"], default="scan")
-    parser.add_argument("--backtest-mode", choices=["daily", "multi_timeframe", "compare"], default=None)
+    parser.add_argument(
+        "--backtest-mode",
+        choices=["daily", "multi_timeframe", "compare", "sector_rotation", "compare_sector"],
+        default=None,
+    )
     parser.add_argument("--start", help="Backtest start date, YYYY-MM-DD")
     parser.add_argument("--end", help="Backtest end date, YYYY-MM-DD")
     parser.add_argument("--capital", type=float, help="Backtest initial capital")
     parser.add_argument("--capital-per-trade", type=float, help="Backtest capital per trade")
+    parser.add_argument("--top-sectors", type=int, help="Sector rotation top sectors")
+    parser.add_argument("--top-stocks-per-sector", type=int, help="Sector rotation top stocks per sector")
     return parser.parse_args()
 
 
@@ -64,6 +76,11 @@ def apply_cli_overrides(config: dict, args: argparse.Namespace) -> None:
         backtest_config["capital_per_trade"] = args.capital_per_trade
     if args.backtest_mode:
         backtest_config["mode"] = args.backtest_mode
+    sector_rotation = config.setdefault("sector_rotation", {})
+    if args.top_sectors is not None:
+        sector_rotation["top_sectors"] = args.top_sectors
+    if args.top_stocks_per_sector is not None:
+        sector_rotation["top_stocks_per_sector"] = args.top_stocks_per_sector
 
 
 def run_backtest(universe: list[str], config: dict) -> None:
@@ -79,7 +96,15 @@ def run_backtest(universe: list[str], config: dict) -> None:
     if backtest_mode == "compare":
         run_comparison_backtest(universe, config)
         return
-    raise ValueError("backtest.mode must be 'daily', 'multi_timeframe', or 'compare'")
+    if backtest_mode == "sector_rotation":
+        summary = run_sector_rotation_backtest(config)
+        print_backtest_summary("Sector Rotation Backtest Complete", summary, config, "sector_rotation")
+        print_sector_rotation_context(config)
+        return
+    if backtest_mode == "compare_sector":
+        run_sector_comparison_backtest(universe, config)
+        return
+    raise ValueError("backtest.mode must be 'daily', 'multi_timeframe', 'compare', 'sector_rotation', or 'compare_sector'")
 
 
 def run_daily_backtest(universe: list[str], config: dict) -> dict:
@@ -90,6 +115,11 @@ def run_daily_backtest(universe: list[str], config: dict) -> dict:
 def run_mtf_backtest(universe: list[str], config: dict) -> dict:
     engine = MultiTimeframeSyntheticOptionsBacktestEngine(config)
     return engine.run(universe)
+
+
+def run_sector_rotation_backtest(config: dict) -> dict:
+    engine = SectorRotationBacktestEngine(config)
+    return engine.run()
 
 
 def run_comparison_backtest(universe: list[str], config: dict) -> None:
@@ -125,6 +155,40 @@ def run_comparison_backtest(universe: list[str], config: dict) -> None:
     print(f"- {output_config['comparison_summary_json_path']}")
 
 
+def run_sector_comparison_backtest(universe: list[str], config: dict) -> None:
+    static_summary = run_daily_backtest(universe, config)
+    sector_summary = run_sector_rotation_backtest(config)
+    comparison = compare_static_vs_sector_rotation(static_summary, sector_summary)
+    output_config = config["output"]
+    save_sector_comparison_outputs(
+        comparison,
+        output_config["sector_comparison_summary_csv_path"],
+        output_config["sector_comparison_summary_json_path"],
+    )
+
+    print("\nSector Rotation Comparison Complete\n")
+    print("Static Daily:")
+    print(f"  Total PnL: ${static_summary['total_pnl']:,.0f}")
+    print(f"  Trades: {static_summary['total_trades']}")
+    print(f"  Win Rate: {static_summary['win_rate'] * 100:.1f}%")
+    print(f"  Profit Factor: {static_summary['profit_factor']:.2f}")
+    print(f"  Max Drawdown: ${static_summary['max_drawdown']:,.0f}")
+    print("\nSector Rotation:")
+    print(f"  Total PnL: ${sector_summary['total_pnl']:,.0f}")
+    print(f"  Trades: {sector_summary['total_trades']}")
+    print(f"  Win Rate: {sector_summary['win_rate'] * 100:.1f}%")
+    print(f"  Profit Factor: {sector_summary['profit_factor']:.2f}")
+    print(f"  Max Drawdown: ${sector_summary['max_drawdown']:,.0f}")
+    print("\nAssessment:")
+    print(f"  Improved return: {_yes_no(comparison['assessment']['sector_rotation_improved_return'])}")
+    print(f"  Reduced drawdown: {_yes_no(comparison['assessment']['sector_rotation_reduced_drawdown'])}")
+    print(f"  Improved profit factor: {_yes_no(comparison['assessment']['sector_rotation_improved_profit_factor'])}")
+    print(f"  Overtrading warning: {_yes_no(comparison['assessment']['sector_rotation_overtrading_warning'])}")
+    print("\nFiles saved:")
+    print(f"- {output_config['sector_comparison_summary_csv_path']}")
+    print(f"- {output_config['sector_comparison_summary_json_path']}")
+
+
 def print_backtest_summary(title: str, summary: dict, config: dict, output_prefix: str) -> None:
     output_config = config["output"]
 
@@ -140,6 +204,28 @@ def print_backtest_summary(title: str, summary: dict, config: dict, output_prefi
     print(f"- {output_config[f'{output_prefix}_backtest_trades_path']}")
     print(f"- {output_config[f'{output_prefix}_backtest_equity_curve_path']}")
     print(f"- {output_config[f'{output_prefix}_backtest_summary_path']}")
+
+
+def print_sector_rotation_context(config: dict) -> None:
+    weekly_path = config["output"]["weekly_universes_path"]
+    try:
+        weekly = pd.read_csv(weekly_path)
+    except Exception:
+        return
+    if weekly.empty:
+        return
+    latest = weekly[weekly["week_start"] == weekly["week_start"].max()]
+    sectors = latest[
+        (~latest["sector"].isin(["Market", "Growth"]))
+        & latest["sector_score"].notna()
+    ][["sector", "sector_score"]].drop_duplicates().head(3)
+    print("\nTop Sectors This Week:")
+    for index, row in enumerate(sectors.to_dict("records"), start=1):
+        score = row["sector_score"]
+        score_text = "n/a" if pd.isna(score) else f"{score:.0f}"
+        print(f"{index}. {row['sector']} score {score_text}")
+    print("\nUniverse:")
+    print(", ".join(latest["ticker"].dropna().astype(str).tolist()))
 
 
 def run_ibkr_scan(universe: list[str], config: dict) -> list[OptionCandidate]:

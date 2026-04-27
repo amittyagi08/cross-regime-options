@@ -29,3 +29,7 @@ class BacktestTrade:
     score_60m: float | None = None
     score_5m: float | None = None
     position_size_multiplier: float = 1.0
+    sector: str | None = None
+    sector_etf: str | None = None
+    sector_score: float | None = None
+    stock_score: float | None = None

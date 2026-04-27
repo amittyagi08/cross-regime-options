@@ -67,10 +67,28 @@ python -m src.main --mode backtest --backtest-mode multi_timeframe --start 2025-
 python -m src.main --mode backtest --backtest-mode compare --start 2025-01-01 --end 2026-04-26
 ```
 
+Sector rotation with a weekly dynamic universe:
+
+```bash
+python -m src.main --mode backtest --backtest-mode sector_rotation --start 2021-01-01 --end 2026-04-26
+```
+
+Compare static daily versus sector rotation:
+
+```bash
+python -m src.main --mode backtest --backtest-mode compare_sector --start 2021-01-01 --end 2026-04-26
+```
+
 Optional capital overrides:
 
 ```bash
 python -m src.main --mode backtest --backtest-mode compare --capital 10000 --capital-per-trade 1000
+```
+
+Sector rotation overrides:
+
+```bash
+python -m src.main --mode backtest --backtest-mode sector_rotation --top-sectors 3 --top-stocks-per-sector 5
 ```
 
 Daily backtest files:
@@ -89,6 +107,16 @@ Comparison files:
 
 - `output/comparison_summary.csv`
 - `output/comparison_summary.json`
+
+Sector rotation files:
+
+- `output/sector_scores.csv`
+- `output/weekly_universes.csv`
+- `output/sector_rotation_backtest_trades.csv`
+- `output/sector_rotation_backtest_equity_curve.csv`
+- `output/sector_rotation_backtest_summary.json`
+- `output/sector_comparison_summary.csv`
+- `output/sector_comparison_summary.json`
 
 The daily backtest preserves the original V2 daily-only logic. The multi-timeframe backtest uses prior completed daily context, latest completed 60-minute context, and completed 5-minute bars for timing. Synthetic option entry is modeled at the next available 5-minute bar open.
 
@@ -111,6 +139,9 @@ Useful sections:
 - `timeframe_60m`: 60-minute confirmation settings.
 - `timeframe_5m`: 5-minute trigger settings.
 - `overtrading`: trade frequency controls.
+- `sector_rotation`: weekly dynamic-universe settings.
+- `sector_scoring`: sector momentum and relative-strength weights.
+- `stock_scoring`: within-sector stock ranking weights.
 - `output`: output file paths.
 
 For private local settings, create `config.local.yaml` or use `.env`; both are ignored by git.

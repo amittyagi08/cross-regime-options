@@ -95,8 +95,9 @@ class MultiTimeframeSyntheticOptionsBacktestEngine:
         data_config = self.config.get("data", {})
         start_date = self.config["backtest"]["start_date"]
         end_date = self.config["backtest"]["end_date"]
+        daily_start_date = (pd.Timestamp(start_date) - pd.Timedelta(days=420)).strftime("%Y-%m-%d")
         try:
-            daily = load_price_history(ticker, start_date, end_date)
+            daily = load_price_history(ticker, daily_start_date, end_date)
             bars_60m = load_intraday_history(ticker, data_config.get("intraday_60m_period", "730d"), "60m")
             bars_5m = load_intraday_history(ticker, data_config.get("intraday_5m_period", "60d"), "5m")
         except Exception as exc:
@@ -150,7 +151,8 @@ class MultiTimeframeSyntheticOptionsBacktestEngine:
         data = {}
         for key, symbol in symbols.items():
             try:
-                frame = load_price_history(symbol, self.config["backtest"]["start_date"], self.config["backtest"]["end_date"])
+                daily_start_date = (pd.Timestamp(self.config["backtest"]["start_date"]) - pd.Timedelta(days=420)).strftime("%Y-%m-%d")
+                frame = load_price_history(symbol, daily_start_date, self.config["backtest"]["end_date"])
                 data[key] = self._prepare_daily(frame) if not frame.empty else pd.DataFrame()
             except Exception:
                 data[key] = pd.DataFrame()

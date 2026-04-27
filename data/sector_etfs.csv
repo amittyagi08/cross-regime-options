@@ -1,0 +1,15 @@
+sector,etf,description
+Market,SPY,S&P 500 Benchmark
+Growth,QQQ,Nasdaq 100 Growth Benchmark
+Technology,XLK,Technology
+Semiconductors,SMH,Semiconductors
+Software,IGV,Software
+Financials,XLF,Financials
+Energy,XLE,Energy
+Healthcare,XLV,Healthcare
+ConsumerDiscretionary,XLY,Consumer Discretionary
+ConsumerStaples,XLP,Consumer Staples
+Industrials,XLI,Industrials
+Materials,XLB,Materials
+Utilities,XLU,Utilities
+Biotech,XBI,Biotech
