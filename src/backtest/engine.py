@@ -17,8 +17,9 @@ from src.volatility import estimate_historical_volatility
 
 
 class SyntheticOptionsBacktestEngine:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, output_prefix: str = "backtest"):
         self.config = config
+        self.output_prefix = output_prefix
         self.trades: list[BacktestTrade] = []
         self.equity_curve: list[dict] = []
 
@@ -30,6 +31,7 @@ class SyntheticOptionsBacktestEngine:
         frames = {ticker: frame for ticker, frame in frames.items() if not frame.empty}
         if not frames:
             summary = calculate_backtest_metrics([], float(self.config["backtest"]["initial_capital"]))
+            summary.update(_overtrading_metrics([]))
             self._save_outputs(summary)
             return summary
 
@@ -68,6 +70,7 @@ class SyntheticOptionsBacktestEngine:
             realized_pnl += self._close_trade(open_trades, ticker, last_row, "end_of_backtest")
 
         summary = calculate_backtest_metrics(self.trades, initial_capital)
+        summary.update(_overtrading_metrics(self.trades))
         self._save_outputs(summary)
         return summary
 
@@ -219,6 +222,49 @@ class SyntheticOptionsBacktestEngine:
 
     def _save_outputs(self, summary: dict) -> None:
         output_config = self.config["output"]
-        save_trades_csv(self.trades, output_config["backtest_trades_path"])
-        save_equity_curve_csv(self.equity_curve, output_config["backtest_equity_curve_path"])
-        save_summary_json(summary, output_config["backtest_summary_path"])
+        trades_path = output_config.get(f"{self.output_prefix}_backtest_trades_path", output_config["backtest_trades_path"])
+        equity_path = output_config.get(
+            f"{self.output_prefix}_backtest_equity_curve_path",
+            output_config["backtest_equity_curve_path"],
+        )
+        summary_path = output_config.get(f"{self.output_prefix}_backtest_summary_path", output_config["backtest_summary_path"])
+        save_trades_csv(self.trades, trades_path)
+        save_equity_curve_csv(self.equity_curve, equity_path)
+        save_summary_json(summary, summary_path)
+
+
+def _overtrading_metrics(trades: list[BacktestTrade]) -> dict:
+    if not trades:
+        return {
+            "trades_per_day": {},
+            "trades_per_week": {},
+            "trades_per_ticker": {},
+            "average_trades_per_day": 0.0,
+            "max_trades_in_one_day": 0,
+            "max_trades_in_one_week": 0,
+            "return_per_trade": 0.0,
+            "pnl_per_day": 0.0,
+        }
+
+    trades_per_day: dict[str, int] = {}
+    trades_per_week: dict[str, int] = {}
+    trades_per_ticker: dict[str, int] = {}
+    for trade in trades:
+        day_key = trade.entry_date.isoformat()
+        week_key = f"{trade.entry_date.isocalendar().year}-W{trade.entry_date.isocalendar().week:02d}"
+        trades_per_day[day_key] = trades_per_day.get(day_key, 0) + 1
+        trades_per_week[week_key] = trades_per_week.get(week_key, 0) + 1
+        trades_per_ticker[trade.ticker] = trades_per_ticker.get(trade.ticker, 0) + 1
+
+    total_pnl = sum(float(trade.pnl or 0) for trade in trades)
+    days = max(1, (max(trade.exit_date or trade.entry_date for trade in trades) - min(trade.entry_date for trade in trades)).days)
+    return {
+        "trades_per_day": trades_per_day,
+        "trades_per_week": trades_per_week,
+        "trades_per_ticker": trades_per_ticker,
+        "average_trades_per_day": len(trades) / max(1, len(trades_per_day)),
+        "max_trades_in_one_day": max(trades_per_day.values()),
+        "max_trades_in_one_week": max(trades_per_week.values()),
+        "return_per_trade": total_pnl / len(trades),
+        "pnl_per_day": total_pnl / days,
+    }

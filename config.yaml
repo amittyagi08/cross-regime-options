@@ -34,12 +34,65 @@ black_scholes:
 
 backtest:
   enabled: true
+  mode: "daily"
   start_date: "2025-01-01"
   end_date: "2026-04-26"
   initial_capital: 10000
   capital_per_trade: 1000
   max_positions: 3
   max_holding_days: 5
+  one_trade_per_ticker: true
+  avoid_last_n_bars: 5
+
+data:
+  provider: "yahoo"
+  daily_period: "2y"
+  intraday_60m_period: "730d"
+  intraday_5m_period: "60d"
+
+daily_filter:
+  use_spy_regime: true
+  use_qqq_regime: true
+  use_smh_regime: true
+  require_close_above_sma50: true
+  require_close_above_sma200: false
+  require_ema21_above_sma50: false
+  min_daily_momentum_score: 0.04
+
+regime:
+  spy_symbol: "SPY"
+  qqq_symbol: "QQQ"
+  smh_symbol: "SMH"
+  require_spy_above_sma50: true
+  require_qqq_above_sma50: true
+  require_smh_above_sma50: false
+  require_qqq_momentum_positive: true
+
+timeframe_60m:
+  enabled: true
+  require_price_above_ema21: true
+  require_positive_momentum: true
+  momentum_lookback_bars: 6
+  breakout_lookback_bars: 10
+  min_60m_return: 0.005
+  avoid_if_extended_from_ema21_pct: 0.06
+
+timeframe_5m:
+  enabled: true
+  entry_trigger: "breakout_or_vwap_reclaim"
+  require_price_above_vwap: true
+  opening_range_minutes: 30
+  breakout_lookback_bars: 6
+  min_5m_return: 0.003
+  min_volume_ratio: 1.2
+  avoid_first_minutes: 10
+  avoid_last_minutes: 20
+
+mtf_scoring:
+  entry_threshold: 60
+  early_exit_threshold: 40
+  full_size_threshold: 75
+  half_size_multiplier: 0.5
 
 synthetic_options:
   min_dte: 14
@@ -64,9 +117,26 @@ exit:
   stop_loss_pct: -0.25
   max_holding_days: 5
   exit_on_close_below_ema21: true
+  exit_on_5m_vwap_loss: true
+  exit_on_60m_ema21_loss: true
+  exit_if_no_followthrough_bars: 12
+  no_followthrough_min_profit_pct: 0.05
+
+overtrading:
+  max_trades_per_day: 3
+  max_trades_per_ticker_per_week: 2
+  min_hours_between_trades_same_ticker: 24
 
 output:
   ranked_contracts_path: "output/ranked_contracts.csv"
   backtest_trades_path: "output/backtest_trades.csv"
   backtest_equity_curve_path: "output/backtest_equity_curve.csv"
   backtest_summary_path: "output/backtest_summary.json"
+  daily_backtest_trades_path: "output/daily_backtest_trades.csv"
+  daily_backtest_equity_curve_path: "output/daily_backtest_equity_curve.csv"
+  daily_backtest_summary_path: "output/daily_backtest_summary.json"
+  mtf_backtest_trades_path: "output/mtf_backtest_trades.csv"
+  mtf_backtest_equity_curve_path: "output/mtf_backtest_equity_curve.csv"
+  mtf_backtest_summary_path: "output/mtf_backtest_summary.json"
+  comparison_summary_csv_path: "output/comparison_summary.csv"
+  comparison_summary_json_path: "output/comparison_summary.json"

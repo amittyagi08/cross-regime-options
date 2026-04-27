@@ -11,7 +11,7 @@ This project is for research and educational use only. It does not place trades,
 - Scans listed option chains from free Yahoo data.
 - Estimates call Greeks with Black-Scholes formulas.
 - Ranks call candidates by momentum, delta, theta, liquidity, spread, and days to expiry.
-- Runs a synthetic options backtest using daily stock prices and Black-Scholes repricing.
+- Runs daily and multi-timeframe synthetic options backtests using Black-Scholes repricing.
 - Saves scanner and backtest outputs to CSV/JSON files.
 
 ## Research Assumptions
@@ -53,23 +53,45 @@ The scanner writes:
 
 - `output/ranked_contracts.csv`
 
-## Run Backtest
+## Run Backtests
 
 ```bash
-python -m src.main --mode backtest --start 2025-01-01 --end 2026-04-26
+python -m src.main --mode backtest --backtest-mode daily --start 2025-01-01 --end 2026-04-26
 ```
-
-Optional overrides:
 
 ```bash
-python -m src.main --mode backtest --capital 10000 --capital-per-trade 1000
+python -m src.main --mode backtest --backtest-mode multi_timeframe --start 2025-01-01 --end 2026-04-26
 ```
 
-The backtest writes:
+```bash
+python -m src.main --mode backtest --backtest-mode compare --start 2025-01-01 --end 2026-04-26
+```
 
-- `output/backtest_trades.csv`
-- `output/backtest_equity_curve.csv`
-- `output/backtest_summary.json`
+Optional capital overrides:
+
+```bash
+python -m src.main --mode backtest --backtest-mode compare --capital 10000 --capital-per-trade 1000
+```
+
+Daily backtest files:
+
+- `output/daily_backtest_trades.csv`
+- `output/daily_backtest_equity_curve.csv`
+- `output/daily_backtest_summary.json`
+
+Multi-timeframe backtest files:
+
+- `output/mtf_backtest_trades.csv`
+- `output/mtf_backtest_equity_curve.csv`
+- `output/mtf_backtest_summary.json`
+
+Comparison files:
+
+- `output/comparison_summary.csv`
+- `output/comparison_summary.json`
+
+The daily backtest preserves the original V2 daily-only logic. The multi-timeframe backtest uses prior completed daily context, latest completed 60-minute context, and completed 5-minute bars for timing. Synthetic option entry is modeled at the next available 5-minute bar open.
+
 
 ## Configuration
 
@@ -84,6 +106,11 @@ Useful sections:
 - `synthetic_options`: Black-Scholes pricing assumptions.
 - `entry`: backtest entry rules.
 - `exit`: backtest exit rules.
+- `daily_filter`: daily trend and regime filters.
+- `regime`: market regime symbols and requirements.
+- `timeframe_60m`: 60-minute confirmation settings.
+- `timeframe_5m`: 5-minute trigger settings.
+- `overtrading`: trade frequency controls.
 - `output`: output file paths.
 
 For private local settings, create `config.local.yaml` or use `.env`; both are ignored by git.

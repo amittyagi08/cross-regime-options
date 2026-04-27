@@ -5,7 +5,9 @@ from dataclasses import asdict
 
 import pandas as pd
 
+from src.backtest.comparison import compare_backtest_results, save_comparison_outputs
 from src.backtest.engine import SyntheticOptionsBacktestEngine
+from src.backtest.multi_timeframe_engine import MultiTimeframeSyntheticOptionsBacktestEngine
 from src.config import load_config
 from src.ibkr_client import IBKRClient
 from src.models import OptionCandidate, MomentumSignal
@@ -42,6 +44,7 @@ def main() -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross Regime Alpha Options Overlay")
     parser.add_argument("--mode", choices=["scan", "backtest"], default="scan")
+    parser.add_argument("--backtest-mode", choices=["daily", "multi_timeframe", "compare"], default=None)
     parser.add_argument("--start", help="Backtest start date, YYYY-MM-DD")
     parser.add_argument("--end", help="Backtest end date, YYYY-MM-DD")
     parser.add_argument("--capital", type=float, help="Backtest initial capital")
@@ -59,14 +62,73 @@ def apply_cli_overrides(config: dict, args: argparse.Namespace) -> None:
         backtest_config["initial_capital"] = args.capital
     if args.capital_per_trade is not None:
         backtest_config["capital_per_trade"] = args.capital_per_trade
+    if args.backtest_mode:
+        backtest_config["mode"] = args.backtest_mode
 
 
 def run_backtest(universe: list[str], config: dict) -> None:
-    engine = SyntheticOptionsBacktestEngine(config)
-    summary = engine.run(universe)
+    backtest_mode = str(config.get("backtest", {}).get("mode", "daily"))
+    if backtest_mode == "daily":
+        summary = run_daily_backtest(universe, config)
+        print_backtest_summary("Daily Synthetic Options Backtest Complete", summary, config, "daily")
+        return
+    if backtest_mode == "multi_timeframe":
+        summary = run_mtf_backtest(universe, config)
+        print_backtest_summary("Multi-Timeframe Synthetic Options Backtest Complete", summary, config, "mtf")
+        return
+    if backtest_mode == "compare":
+        run_comparison_backtest(universe, config)
+        return
+    raise ValueError("backtest.mode must be 'daily', 'multi_timeframe', or 'compare'")
+
+
+def run_daily_backtest(universe: list[str], config: dict) -> dict:
+    engine = SyntheticOptionsBacktestEngine(config, output_prefix="daily")
+    return engine.run(universe)
+
+
+def run_mtf_backtest(universe: list[str], config: dict) -> dict:
+    engine = MultiTimeframeSyntheticOptionsBacktestEngine(config)
+    return engine.run(universe)
+
+
+def run_comparison_backtest(universe: list[str], config: dict) -> None:
+    daily_summary = run_daily_backtest(universe, config)
+    mtf_summary = run_mtf_backtest(universe, config)
+    comparison = compare_backtest_results(daily_summary, mtf_summary)
+    output_config = config["output"]
+    save_comparison_outputs(
+        comparison,
+        output_config["comparison_summary_csv_path"],
+        output_config["comparison_summary_json_path"],
+    )
+
+    print("\nBacktest Comparison Complete\n")
+    print("Daily:")
+    print(f"  Total PnL: ${daily_summary['total_pnl']:,.0f}")
+    print(f"  Trades: {daily_summary['total_trades']}")
+    print(f"  Win Rate: {daily_summary['win_rate'] * 100:.1f}%")
+    print(f"  Profit Factor: {daily_summary['profit_factor']:.2f}")
+    print(f"  Max Drawdown: ${daily_summary['max_drawdown']:,.0f}")
+    print("\nMulti-Timeframe:")
+    print(f"  Total PnL: ${mtf_summary['total_pnl']:,.0f}")
+    print(f"  Trades: {mtf_summary['total_trades']}")
+    print(f"  Win Rate: {mtf_summary['win_rate'] * 100:.1f}%")
+    print(f"  Profit Factor: {mtf_summary['profit_factor']:.2f}")
+    print(f"  Max Drawdown: ${mtf_summary['max_drawdown']:,.0f}")
+    print("\nAssessment:")
+    print(f"  MTF reduced drawdown: {_yes_no(comparison['assessment']['mtf_reduced_drawdown'])}")
+    print(f"  MTF improved profit factor: {_yes_no(comparison['assessment']['mtf_improved_profit_factor'])}")
+    print(f"  Overtrading warning: {_yes_no(comparison['assessment']['mtf_overtrading_warning'])}")
+    print("\nFiles saved:")
+    print(f"- {output_config['comparison_summary_csv_path']}")
+    print(f"- {output_config['comparison_summary_json_path']}")
+
+
+def print_backtest_summary(title: str, summary: dict, config: dict, output_prefix: str) -> None:
     output_config = config["output"]
 
-    print("\nSynthetic Options Backtest Complete\n")
+    print(f"\n{title}\n")
     print(f"Initial Capital: ${float(config['backtest']['initial_capital']):,.0f}")
     print(f"Total Trades: {summary['total_trades']}")
     print(f"Win Rate: {summary['win_rate'] * 100:.1f}%")
@@ -75,9 +137,9 @@ def run_backtest(universe: list[str], config: dict) -> None:
     print(f"Max Drawdown: ${summary['max_drawdown']:,.0f}")
     print(f"Average Holding Days: {summary['average_holding_days']:.1f}")
     print("\nFiles saved:")
-    print(f"- {output_config['backtest_trades_path']}")
-    print(f"- {output_config['backtest_equity_curve_path']}")
-    print(f"- {output_config['backtest_summary_path']}")
+    print(f"- {output_config[f'{output_prefix}_backtest_trades_path']}")
+    print(f"- {output_config[f'{output_prefix}_backtest_equity_curve_path']}")
+    print(f"- {output_config[f'{output_prefix}_backtest_summary_path']}")
 
 
 def run_ibkr_scan(universe: list[str], config: dict) -> list[OptionCandidate]:
@@ -261,6 +323,10 @@ def _fmt(value) -> str:
     if value is None:
         return "n/a"
     return f"{value:.2f}"
+
+
+def _yes_no(value: bool) -> str:
+    return "YES" if value else "NO"
 
 
 if __name__ == "__main__":

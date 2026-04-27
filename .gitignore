@@ -32,3 +32,6 @@ data/cache/
 Thumbs.db
 .vscode/
 .idea/
+
+#Instruction files
+md

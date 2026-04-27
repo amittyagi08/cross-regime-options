@@ -23,3 +23,9 @@ class BacktestTrade:
     pnl: float | None
     pnl_pct: float | None
     holding_days: int | None
+    entry_signal_score: float | None = None
+    exit_signal_score: float | None = None
+    daily_score: float | None = None
+    score_60m: float | None = None
+    score_5m: float | None = None
+    position_size_multiplier: float = 1.0
