@@ -21,6 +21,8 @@ COMPARISON_FIELDS = [
     "max_trades_in_one_day",
     "return_per_trade",
     "pnl_per_day",
+    "return_to_drawdown_ratio",
+    "max_consecutive_losses",
 ]
 
 
@@ -101,9 +103,54 @@ def save_sector_comparison_outputs(comparison: dict, csv_path: str, json_path: s
         json.dump(comparison, file, indent=2)
 
 
+def compare_v4_vs_v41_risk(base_summary: dict, risk_summary: dict) -> dict:
+    comparison = {
+        "sector_rotation": _summary_subset(base_summary),
+        "sector_rotation_risk": _summary_subset(risk_summary),
+    }
+
+    base_dd = abs(float(base_summary.get("max_drawdown", 0.0)))
+    risk_dd = abs(float(risk_summary.get("max_drawdown", 0.0)))
+    base_pf = float(base_summary.get("profit_factor", 0.0))
+    risk_pf = float(risk_summary.get("profit_factor", 0.0))
+    base_trades = int(base_summary.get("total_trades", 0))
+    risk_trades = int(risk_summary.get("total_trades", 0))
+    base_total_pnl = float(base_summary.get("total_pnl", 0.0))
+    risk_total_pnl = float(risk_summary.get("total_pnl", 0.0))
+    base_rtd = float(base_summary.get("return_to_drawdown_ratio", 0.0))
+    risk_rtd = float(risk_summary.get("return_to_drawdown_ratio", 0.0))
+
+    comparison["assessment"] = {
+        "risk_reduced_drawdown": risk_dd < base_dd,
+        "risk_improved_profit_factor": risk_pf > base_pf,
+        "risk_improved_return_to_drawdown": risk_rtd > base_rtd,
+        "risk_preserved_trade_count": risk_trades >= base_trades * 0.70,
+        "risk_preserved_edge": (risk_pf >= base_pf and risk_total_pnl >= base_total_pnl * 0.75),
+    }
+    return comparison
+
+
+def save_risk_comparison_outputs(comparison: dict, csv_path: str, json_path: str) -> None:
+    ensure_parent_dir(csv_path)
+    rows = []
+    for mode in ["sector_rotation", "sector_rotation_risk"]:
+        row = {"mode": mode}
+        row.update(comparison[mode])
+        rows.append(row)
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+
+    ensure_parent_dir(json_path)
+    with open(json_path, "w", encoding="utf-8") as file:
+        json.dump(comparison, file, indent=2)
+
+
 def _summary_subset(summary: dict) -> dict:
     result = {field: summary.get(field, 0.0) for field in COMPARISON_FIELDS}
     if "return_pct" not in summary:
         initial = float(summary.get("ending_capital", 0.0)) - float(summary.get("total_pnl", 0.0))
         result["return_pct"] = float(summary.get("total_pnl", 0.0)) / initial if initial else 0.0
+    if not result.get("return_to_drawdown_ratio"):
+        dd = float(summary.get("max_drawdown", 0.0))
+        pnl = float(summary.get("total_pnl", 0.0))
+        result["return_to_drawdown_ratio"] = (pnl / abs(dd)) if dd < 0 else 0.0
     return result

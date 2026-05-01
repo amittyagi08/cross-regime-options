@@ -3,6 +3,20 @@ from __future__ import annotations
 import pandas as pd
 
 
+UNIVERSE_COLUMNS = [
+    "week_start",
+    "sector",
+    "sector_etf",
+    "sector_score",
+    "sector_rank",
+    "ticker",
+    "stock_score",
+    "stock_rank_within_sector",
+    "is_benchmark",
+    "is_tradable",
+]
+
+
 def build_weekly_universe(
     as_of_date,
     sector_scores: pd.DataFrame,
@@ -20,33 +34,15 @@ def build_weekly_universe(
         & (stock_scores["stock_score"] >= float(rotation.get("min_stock_score", 55)))
     ]
     if selected_stocks.empty:
-        return pd.DataFrame(
-            columns=[
-                "week_start",
-                "sector",
-                "sector_etf",
-                "sector_score",
-                "sector_rank",
-                "ticker",
-                "stock_score",
-                "stock_rank_within_sector",
-            ]
-        )
+        return pd.DataFrame(columns=UNIVERSE_COLUMNS)
+
     result = selected_stocks.merge(
         selected_sectors[["sector", "sector_score", "sector_rank"]],
         on="sector",
         how="left",
     )
     result["week_start"] = pd.Timestamp(as_of_date).date()
-    return result[
-        [
-            "week_start",
-            "sector",
-            "sector_etf",
-            "sector_score",
-            "sector_rank",
-            "ticker",
-            "stock_score",
-            "stock_rank_within_sector",
-        ]
-    ].sort_values(["sector_rank", "stock_rank_within_sector"])
+    result["is_benchmark"] = False
+    result["is_tradable"] = True
+
+    return result[UNIVERSE_COLUMNS].sort_values(["sector_rank", "stock_rank_within_sector"])

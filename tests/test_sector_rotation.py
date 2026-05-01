@@ -3,6 +3,7 @@ from datetime import date
 import pandas as pd
 
 from src.backtest.comparison import compare_static_vs_sector_rotation
+from src.backtest.sector_rotation_engine import _append_benchmarks
 from src.sector_rotation.rebalance import get_effective_rebalance_date, get_rebalance_dates
 from src.sector_rotation.sector_scoring import rank_normalize
 from src.sector_rotation.universe_builder import build_weekly_universe
@@ -52,6 +53,40 @@ def test_build_weekly_universe_filters_sector_and_stock_scores():
     universe = build_weekly_universe(date(2026, 1, 5), sector_scores, stock_scores, config)
 
     assert universe["ticker"].tolist() == ["MSFT"]
+    assert universe["is_benchmark"].tolist() == [False]
+    assert universe["is_tradable"].tolist() == [True]
+
+
+def test_append_benchmarks_default_non_tradable():
+    weekly = pd.DataFrame(
+        [
+            {
+                "week_start": date(2026, 1, 5),
+                "sector": "Tech",
+                "sector_etf": "XLK",
+                "sector_score": 80,
+                "sector_rank": 1,
+                "ticker": "MSFT",
+                "stock_score": 70,
+                "stock_rank_within_sector": 1,
+                "is_benchmark": False,
+                "is_tradable": True,
+            }
+        ]
+    )
+    config = {
+        "sector_rotation": {
+            "benchmark_symbol": "SPY",
+            "growth_benchmark_symbol": "QQQ",
+            "allow_benchmark_trading": False,
+        }
+    }
+
+    output = _append_benchmarks(weekly, date(2026, 1, 5), config)
+    benchmark_rows = output[output["is_benchmark"] == True]
+
+    assert set(benchmark_rows["ticker"].tolist()) == {"SPY", "QQQ"}
+    assert benchmark_rows["is_tradable"].eq(False).all()
 
 
 def test_sector_comparison_flags():

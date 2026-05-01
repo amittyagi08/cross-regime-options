@@ -79,6 +79,18 @@ Compare static daily versus sector rotation:
 python -m src.main --mode backtest --backtest-mode compare_sector --start 2021-01-01 --end 2026-04-26
 ```
 
+V4.1 sector rotation with risk controls:
+
+```bash
+python -m src.main --mode backtest --backtest-mode sector_rotation_risk --start 2021-01-01 --end 2026-04-26
+```
+
+Compare V4 sector rotation versus V4.1 risk-controlled sector rotation:
+
+```bash
+python -m src.main --mode backtest --backtest-mode compare_risk --start 2021-01-01 --end 2026-04-26
+```
+
 Optional capital overrides:
 
 ```bash
@@ -118,6 +130,15 @@ Sector rotation files:
 - `output/sector_comparison_summary.csv`
 - `output/sector_comparison_summary.json`
 
+V4.1 risk-control files:
+
+- `output/sector_rotation_risk_backtest_trades.csv`
+- `output/sector_rotation_risk_backtest_equity_curve.csv`
+- `output/sector_rotation_risk_backtest_summary.json`
+- `output/risk_events.csv`
+- `output/risk_comparison_summary.csv`
+- `output/risk_comparison_summary.json`
+
 The daily backtest preserves the original V2 daily-only logic. The multi-timeframe backtest uses prior completed daily context, latest completed 60-minute context, and completed 5-minute bars for timing. Synthetic option entry is modeled at the next available 5-minute bar open.
 
 
@@ -142,6 +163,9 @@ Useful sections:
 - `sector_rotation`: weekly dynamic-universe settings.
 - `sector_scoring`: sector momentum and relative-strength weights.
 - `stock_scoring`: within-sector stock ranking weights.
+- `risk_controls`: V4.1 entry blocking, stop, pause, cooldown, and sizing controls.
+- `profit_management`: V4.1 partial-profit and runner management.
+- `risk_reporting`: V4.1 risk event output settings.
 - `output`: output file paths.
 
 For private local settings, create `config.local.yaml` or use `.env`; both are ignored by git.

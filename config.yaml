@@ -53,8 +53,40 @@ sector_rotation:
   min_sector_score: 60
   min_stock_score: 55
   include_benchmark_symbols: true
+  allow_benchmark_trading: false
   benchmark_symbol: "SPY"
   growth_benchmark_symbol: "QQQ"
+
+risk_controls:
+  enabled: true
+  stop_loss_pct: -0.18
+  exit_if_no_followthrough_days: 4
+  no_followthrough_min_profit_pct: 0.01
+  pause_after_consecutive_losses: 999
+  pause_days: 0
+  max_daily_loss_pct: -0.10
+  max_weekly_loss_pct: -0.20
+  cooldown_days_after_ticker_loss: 1
+  max_trades_per_ticker_per_month: 10
+  max_open_positions_per_ticker: 1
+  max_open_positions_per_sector: 2
+  max_trades_per_sector_per_week: 10
+  max_sector_capital_pct: 0.50
+  max_open_positions: 3
+  max_new_trades_per_day: 4
+  reduce_size_after_drawdown_pct: -0.20
+  reduced_position_size_pct: 0.85
+
+profit_management:
+  enabled: true
+  profit_target_1_pct: 0.40
+  sell_half_at_target_1: true
+  runner_trailing_stop_pct: 0.25
+  runner_max_holding_days: 8
+
+risk_reporting:
+  save_risk_events: true
+  risk_events_path: "output/risk_events.csv"
 
 sector_scoring:
   use_rank_normalization: true
@@ -180,5 +212,12 @@ output:
   sector_rotation_backtest_trades_path: "output/sector_rotation_backtest_trades.csv"
   sector_rotation_backtest_equity_curve_path: "output/sector_rotation_backtest_equity_curve.csv"
   sector_rotation_backtest_summary_path: "output/sector_rotation_backtest_summary.json"
+  sector_rotation_risk_backtest_trades_path: "output/sector_rotation_risk_backtest_trades.csv"
+  sector_rotation_risk_backtest_equity_curve_path: "output/sector_rotation_risk_backtest_equity_curve.csv"
+  sector_rotation_risk_backtest_summary_path: "output/sector_rotation_risk_backtest_summary.json"
   sector_comparison_summary_csv_path: "output/sector_comparison_summary.csv"
   sector_comparison_summary_json_path: "output/sector_comparison_summary.json"
+  risk_comparison_summary_csv_path: "output/risk_comparison_summary.csv"
+  risk_comparison_summary_json_path: "output/risk_comparison_summary.json"
+
+

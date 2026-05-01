@@ -8,12 +8,15 @@ import pandas as pd
 from src.backtest.comparison import (
     compare_backtest_results,
     compare_static_vs_sector_rotation,
+    compare_v4_vs_v41_risk,
     save_comparison_outputs,
+    save_risk_comparison_outputs,
     save_sector_comparison_outputs,
 )
 from src.backtest.engine import SyntheticOptionsBacktestEngine
 from src.backtest.multi_timeframe_engine import MultiTimeframeSyntheticOptionsBacktestEngine
 from src.backtest.sector_rotation_engine import SectorRotationBacktestEngine
+from src.backtest.sector_rotation_risk_engine import SectorRotationRiskBacktestEngine
 from src.config import load_config
 from src.ibkr_client import IBKRClient
 from src.models import OptionCandidate, MomentumSignal
@@ -52,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", choices=["scan", "backtest"], default="scan")
     parser.add_argument(
         "--backtest-mode",
-        choices=["daily", "multi_timeframe", "compare", "sector_rotation", "compare_sector"],
+        choices=["daily", "multi_timeframe", "compare", "sector_rotation", "compare_sector", "sector_rotation_risk", "compare_risk"],
         default=None,
     )
     parser.add_argument("--start", help="Backtest start date, YYYY-MM-DD")
@@ -104,7 +107,15 @@ def run_backtest(universe: list[str], config: dict) -> None:
     if backtest_mode == "compare_sector":
         run_sector_comparison_backtest(universe, config)
         return
-    raise ValueError("backtest.mode must be 'daily', 'multi_timeframe', 'compare', 'sector_rotation', or 'compare_sector'")
+    if backtest_mode == "sector_rotation_risk":
+        summary = run_sector_rotation_risk_backtest(config)
+        print_backtest_summary("Sector Rotation Risk Backtest Complete", summary, config, "sector_rotation_risk")
+        print_sector_rotation_context(config)
+        return
+    if backtest_mode == "compare_risk":
+        run_risk_comparison_backtest(config)
+        return
+    raise ValueError("backtest.mode must be 'daily', 'multi_timeframe', 'compare', 'sector_rotation', 'compare_sector', 'sector_rotation_risk', or 'compare_risk'")
 
 
 def run_daily_backtest(universe: list[str], config: dict) -> dict:
@@ -119,6 +130,11 @@ def run_mtf_backtest(universe: list[str], config: dict) -> dict:
 
 def run_sector_rotation_backtest(config: dict) -> dict:
     engine = SectorRotationBacktestEngine(config)
+    return engine.run()
+
+
+def run_sector_rotation_risk_backtest(config: dict) -> dict:
+    engine = SectorRotationRiskBacktestEngine(config)
     return engine.run()
 
 
@@ -187,6 +203,41 @@ def run_sector_comparison_backtest(universe: list[str], config: dict) -> None:
     print("\nFiles saved:")
     print(f"- {output_config['sector_comparison_summary_csv_path']}")
     print(f"- {output_config['sector_comparison_summary_json_path']}")
+
+
+def run_risk_comparison_backtest(config: dict) -> None:
+    base_summary = run_sector_rotation_backtest(config)
+    risk_summary = run_sector_rotation_risk_backtest(config)
+    comparison = compare_v4_vs_v41_risk(base_summary, risk_summary)
+    output_config = config["output"]
+    save_risk_comparison_outputs(
+        comparison,
+        output_config["risk_comparison_summary_csv_path"],
+        output_config["risk_comparison_summary_json_path"],
+    )
+
+    print("\nRisk Comparison Complete\n")
+    print("Sector Rotation (V4):")
+    print(f"  Total PnL: ${base_summary['total_pnl']:,.0f}")
+    print(f"  Trades: {base_summary['total_trades']}")
+    print(f"  Win Rate: {base_summary['win_rate'] * 100:.1f}%")
+    print(f"  Profit Factor: {base_summary['profit_factor']:.2f}")
+    print(f"  Max Drawdown: ${base_summary['max_drawdown']:,.0f}")
+    print("\nSector Rotation Risk (V4.1):")
+    print(f"  Total PnL: ${risk_summary['total_pnl']:,.0f}")
+    print(f"  Trades: {risk_summary['total_trades']}")
+    print(f"  Win Rate: {risk_summary['win_rate'] * 100:.1f}%")
+    print(f"  Profit Factor: {risk_summary['profit_factor']:.2f}")
+    print(f"  Max Drawdown: ${risk_summary['max_drawdown']:,.0f}")
+    print("\nAssessment:")
+    print(f"  Reduced drawdown: {_yes_no(comparison['assessment']['risk_reduced_drawdown'])}")
+    print(f"  Improved profit factor: {_yes_no(comparison['assessment']['risk_improved_profit_factor'])}")
+    print(f"  Improved return/drawdown: {_yes_no(comparison['assessment']['risk_improved_return_to_drawdown'])}")
+    print(f"  Preserved trade count: {_yes_no(comparison['assessment']['risk_preserved_trade_count'])}")
+    print(f"  Preserved edge: {_yes_no(comparison['assessment']['risk_preserved_edge'])}")
+    print("\nFiles saved:")
+    print(f"- {output_config['risk_comparison_summary_csv_path']}")
+    print(f"- {output_config['risk_comparison_summary_json_path']}")
 
 
 def print_backtest_summary(title: str, summary: dict, config: dict, output_prefix: str) -> None:

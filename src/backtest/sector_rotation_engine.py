@@ -37,13 +37,15 @@ class SectorRotationBacktestEngine(SyntheticOptionsBacktestEngine):
         stock_frames = {ticker: frame for ticker, frame in stock_frames.items() if not frame.empty}
         etf_frames_by_symbol = {symbol: self._prepare_history_range(symbol, warmup_start, end_date) for symbol in sector_etf_symbols}
         etf_frames_by_symbol = {symbol: frame for symbol, frame in etf_frames_by_symbol.items() if not frame.empty}
-        if bool(self.config["sector_rotation"].get("include_benchmark_symbols", True)):
-            for symbol in [
-                self.config["sector_rotation"].get("benchmark_symbol", "SPY"),
-                self.config["sector_rotation"].get("growth_benchmark_symbol", "QQQ"),
-            ]:
-                if symbol in etf_frames_by_symbol:
-                    stock_frames[symbol] = etf_frames_by_symbol[symbol]
+
+        # Benchmarks are always loaded for scoring/regime context.
+        for symbol in [
+            self.config["sector_rotation"].get("benchmark_symbol", "SPY"),
+            self.config["sector_rotation"].get("growth_benchmark_symbol", "QQQ"),
+        ]:
+            if symbol in etf_frames_by_symbol:
+                stock_frames[symbol] = etf_frames_by_symbol[symbol]
+
         sector_frames = {
             row["sector"]: etf_frames_by_symbol.get(row["etf"], pd.DataFrame())
             for row in sector_etfs.to_dict("records")
@@ -75,7 +77,8 @@ class SectorRotationBacktestEngine(SyntheticOptionsBacktestEngine):
 
         for current_date in all_dates:
             active_universe = weekly_universe_by_date.get(self._active_week_start(current_date, weekly_universe_by_date), pd.DataFrame())
-            active_tickers = set(active_universe["ticker"].tolist()) if not active_universe.empty else set()
+            tradable_rows = active_universe[active_universe.get("is_tradable", True) == True] if not active_universe.empty else active_universe
+            active_tickers = set(tradable_rows["ticker"].tolist()) if not tradable_rows.empty else set()
             for ticker, frame in frames.items():
                 rows = frame[frame["date"] <= current_date]
                 if rows.empty or rows.iloc[-1]["date"] != current_date:
@@ -206,6 +209,7 @@ def _metadata_for_ticker(active_universe: pd.DataFrame, ticker: str) -> dict:
 
 def _append_benchmarks(weekly: pd.DataFrame, effective, config: dict) -> pd.DataFrame:
     rotation = config["sector_rotation"]
+    allow_benchmark_trading = bool(rotation.get("allow_benchmark_trading", False))
     benchmarks = [
         ("Market", rotation.get("benchmark_symbol", "SPY")),
         ("Growth", rotation.get("growth_benchmark_symbol", "QQQ")),
@@ -220,6 +224,8 @@ def _append_benchmarks(weekly: pd.DataFrame, effective, config: dict) -> pd.Data
             "ticker": ticker,
             "stock_score": None,
             "stock_rank_within_sector": None,
+            "is_benchmark": True,
+            "is_tradable": allow_benchmark_trading,
         }
         for sector, ticker in benchmarks
     ]
