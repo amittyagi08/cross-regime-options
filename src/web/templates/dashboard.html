@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cross Regime Alpha Options Overlay</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Cross Regime Alpha Options Overlay</h1>
+        <p>Mode: Live Validation</p>
+      </div>
+      <button id="refresh">Refresh</button>
+    </header>
+
+    <main>
+      <section class="notice">
+        <strong>Validate in broker platform before trading.</strong>
+        Confirm bid/ask, Greeks, spread, and chart setup manually. Options involve risk of total premium loss.
+      </section>
+
+      <section id="errorBanner" class="error-banner" hidden></section>
+
+      <section class="summary">
+        <div><span>Provider</span><strong id="provider">-</strong></div>
+        <div><span>Last Refresh</span><strong id="asOf">-</strong></div>
+        <div><span>Market Status</span><strong id="marketStatus">-</strong></div>
+        <div><span>Regime</span><strong id="regimeStatus">-</strong></div>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <div>
+            <h2>Strategy Option Ideas</h2>
+            <p>Sector rotation candidates from the tested strategy, ranked for manual validation.</p>
+          </div>
+          <span id="ideaCount" class="count-pill">0 ideas</span>
+        </div>
+        <div id="strategyIdeas" class="idea-grid"></div>
+      </section>
+
+      <section>
+        <h2>Sector Rotation</h2>
+        <table>
+          <thead><tr><th>Rank</th><th>Sector</th><th>ETF</th><th>Score</th><th>1W</th><th>1M</th><th>3M</th><th>Selected</th></tr></thead>
+          <tbody id="sectors"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Dynamic Universe</h2>
+        <table>
+          <thead><tr><th>Ticker</th><th>Sector</th><th>Stock Score</th><th>Momentum</th><th>Last Price</th><th>Selected</th></tr></thead>
+          <tbody id="universe"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Option Candidates</h2>
+        <div class="table-scroll">
+          <table class="options-table">
+            <thead><tr><th>Ticker</th><th>Contract</th><th>Expiry</th><th>Strike</th><th>Bid</th><th>Ask</th><th>Delta</th><th>Theta</th><th>IV</th><th>OI</th><th>DTE</th><th>Score</th><th>MomentumScore</th><th>LiquidityScore</th><th>ThetaEfficiencyScore</th><th>DeltaScore</th><th>IVScore</th><th>DTEScore</th><th>Quote</th></tr></thead>
+            <tbody id="options"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Option Diagnostics</h2>
+        <table>
+          <thead><tr><th>Ticker</th><th>Last Price</th><th>Expiries</th><th>DTE Expiries</th><th>Calls</th><th>Strike</th><th>Quote</th><th>IV</th><th>Greeks</th><th>Reason</th><th>Notes</th></tr></thead>
+          <tbody id="optionDiagnostics"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Risk Decisions</h2>
+        <table>
+          <thead><tr><th>Ticker</th><th>Allowed</th><th>Reason Codes</th><th>Position Multiplier</th><th>Notes</th></tr></thead>
+          <tbody id="risk"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Manual Validation Journal</h2>
+        <form id="journalForm" class="journal">
+          <input name="ticker" placeholder="Ticker" required>
+          <input name="contract_symbol" placeholder="Contract">
+          <input name="signal_score" placeholder="Signal score" type="number" step="0.01">
+          <label><input name="risk_allowed" type="checkbox"> Risk allowed</label>
+          <label><input name="platform_validated" type="checkbox"> Platform price matches</label>
+          <label><input name="chart_validated" type="checkbox"> Chart validated</label>
+          <label><input name="trade_taken" type="checkbox"> Trade taken</label>
+          <input name="contracts" placeholder="Contracts" type="number" min="0">
+          <input name="entry_price" placeholder="Entry price" type="number" step="0.01">
+          <textarea name="manual_notes" placeholder="Notes"></textarea>
+          <button type="submit">Save Journal Entry</button>
+        </form>
+        <table>
+          <thead><tr><th>Time</th><th>Ticker</th><th>Contract</th><th>Trade Taken</th><th>Notes</th></tr></thead>
+          <tbody id="journal"></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

@@ -31,6 +31,16 @@ def main() -> None:
     args = parse_args()
     config = load_config()
     apply_cli_overrides(config, args)
+    if args.mode == "live-scan":
+        run_live_scan(config, save_snapshot=False)
+        return
+    if args.mode == "live-snapshot":
+        run_live_scan(config, save_snapshot=True)
+        return
+    if args.mode == "live-dashboard":
+        run_live_dashboard(config)
+        return
+
     universe = load_universe()
     if args.mode == "backtest":
         run_backtest(universe, config)
@@ -52,7 +62,7 @@ def main() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Cross Regime Alpha Options Overlay")
-    parser.add_argument("--mode", choices=["scan", "backtest"], default="scan")
+    parser.add_argument("--mode", choices=["scan", "backtest", "live-scan", "live-snapshot", "live-dashboard"], default="scan")
     parser.add_argument(
         "--backtest-mode",
         choices=["daily", "multi_timeframe", "compare", "sector_rotation", "compare_sector", "sector_rotation_risk", "compare_risk"],
@@ -65,6 +75,41 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-sectors", type=int, help="Sector rotation top sectors")
     parser.add_argument("--top-stocks-per-sector", type=int, help="Sector rotation top stocks per sector")
     return parser.parse_args()
+
+
+def run_live_scan(config: dict, save_snapshot: bool) -> None:
+    from src.live.signal_service import LiveSignalService
+
+    live = config.setdefault("live", {})
+    original_save = live.get("save_snapshots", True)
+    try:
+        live["save_snapshots"] = save_snapshot
+        snapshot = LiveSignalService(config).run_live_scan()
+    finally:
+        live["save_snapshots"] = original_save
+
+    print("\nLive Signal Scan Complete\n")
+    print(f"Provider: {snapshot.provider}")
+    print(f"As of: {snapshot.as_of}")
+    print(f"Regime: {snapshot.regime_status}")
+    print(f"Sectors: {len(snapshot.sectors)}")
+    print(f"Selected tickers: {sum(1 for item in snapshot.universe if item.selected)}")
+    print(f"Option candidates: {len(snapshot.options)}")
+    print(f"Allowed risk decisions: {sum(1 for item in snapshot.risk if item.allowed)}")
+    if save_snapshot:
+        print(f"Snapshot JSON: {live.get('snapshot_json_path', 'output/live_signal_snapshot.json')}")
+        print(f"Snapshot CSV: {live.get('snapshot_csv_path', 'output/live_signal_snapshot.csv')}")
+
+
+def run_live_dashboard(config: dict) -> None:
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise RuntimeError("Install dashboard dependencies with `pip install -r requirements.txt`") from exc
+
+    print("Starting V5 live validation dashboard at http://127.0.0.1:8000")
+    print("No order placement is available. Validate all signals manually before any trade.")
+    uvicorn.run("src.api.app:create_app", factory=True, host="127.0.0.1", port=8000)
 
 
 def apply_cli_overrides(config: dict, args: argparse.Namespace) -> None:

@@ -53,6 +53,49 @@ The scanner writes:
 
 - `output/ranked_contracts.csv`
 
+## Run V5 Live Validation Dashboard
+
+V5 exposes the V4.1 sector-rotation and risk-control logic as a read-only live validation workflow. It does not place orders, does not include execution buttons, and keeps `live.allow_order_placement` set to `false`.
+
+Run one live scan:
+
+```bash
+python -m src.main --mode live-scan
+```
+
+Save one live snapshot:
+
+```bash
+python -m src.main --mode live-snapshot
+```
+
+Start the local FastAPI dashboard:
+
+```bash
+python -m src.main --mode live-dashboard
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+Health check:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+V5 files:
+
+- `output/live_signal_snapshot.json`
+- `output/live_signal_snapshot.csv`
+- `output/live_dashboard_log.jsonl`
+- `data/validation_journal.csv`
+
+Yahoo live validation data may be delayed or incomplete. Validate bid/ask, Greeks, spread, liquidity, and chart setup in the broker platform before any manual trade.
+
 ## Run Backtests
 
 ```bash
@@ -166,6 +209,10 @@ Useful sections:
 - `risk_controls`: V4.1 entry blocking, stop, pause, cooldown, and sizing controls.
 - `profit_management`: V4.1 partial-profit and runner management.
 - `risk_reporting`: V4.1 risk event output settings.
+- `live`: V5 data provider, refresh, and snapshot settings. `allow_order_placement` must remain `false`.
+- `live_options`: V5 live-only option filters and fallback quote validation settings.
+- `dashboard`: V5 dashboard display settings.
+- `manual_validation`: V5 manual validation journal settings.
 - `output`: output file paths.
 
 For private local settings, create `config.local.yaml` or use `.env`; both are ignored by git.
@@ -181,6 +228,31 @@ python -m pytest -q
 This repository is positioned as a research and backtesting project. Generated results are informational and should be independently verified before any real-world use.
 
 Sensitive local files such as `.env`, `.env.*`, local config variants, generated reports, virtual environments, caches, and local connection scratch files are excluded by `.gitignore`.
+
+## Azure Deployment Notes
+
+Option A: Azure App Service
+
+- Deploy the FastAPI app and run `python -m src.main --mode live-dashboard`.
+- Use Azure App Settings for environment variables.
+- Use Key Vault for any future secrets.
+- Keep `ALLOW_ORDER_PLACEMENT=false`.
+
+Option B: Azure Container Apps
+
+- Build a container image for the FastAPI app.
+- Push it to Azure Container Registry.
+- Deploy the image to Azure Container Apps.
+- Use Azure Storage for snapshots/logs if persistent storage is needed.
+
+Suggested production environment variables:
+
+```text
+APP_ENV=production
+DATA_PROVIDER=yahoo
+ALLOW_ORDER_PLACEMENT=false
+REFRESH_MINUTES=15
+```
 
 ## Roadmap
 

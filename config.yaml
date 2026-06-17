@@ -1,6 +1,40 @@
 scanner:
   data_provider: "yahoo"
 
+live:
+  enabled: true
+  provider: "yahoo"
+  refresh_minutes: 15
+  market_timezone: "America/New_York"
+  allow_order_placement: false
+  require_manual_validation: true
+  save_snapshots: true
+  snapshot_json_path: "output/live_signal_snapshot.json"
+  snapshot_csv_path: "output/live_signal_snapshot.csv"
+  dashboard_log_path: "output/live_dashboard_log.jsonl"
+
+live_options:
+  min_dte: 7
+  max_dte: 45
+  min_delta: 0.45
+  max_delta: 0.75
+  max_bid_ask_spread_pct: 0.20
+  min_open_interest: 0
+  strike_window_pct: 0.10
+  max_theta_abs: 0.40
+
+dashboard:
+  title: "Cross Regime Alpha Options Overlay"
+  show_benchmark_rows: true
+  show_blocked_signals: true
+  show_reason_codes: true
+  max_contracts_per_ticker: 3
+
+manual_validation:
+  enabled: true
+  journal_path: "data/validation_journal.csv"
+  require_pre_trade_notes: true
+
 ibkr:
   host: "127.0.0.1"
   port: 7496

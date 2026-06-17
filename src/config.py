@@ -39,3 +39,10 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
         ibkr["port"] = int(os.environ["IBKR_PORT"])
     if os.getenv("IBKR_CLIENT_ID"):
         ibkr["client_id"] = int(os.environ["IBKR_CLIENT_ID"])
+    live = config.setdefault("live", {})
+    if os.getenv("DATA_PROVIDER"):
+        live["provider"] = os.environ["DATA_PROVIDER"]
+    if os.getenv("REFRESH_MINUTES"):
+        live["refresh_minutes"] = int(os.environ["REFRESH_MINUTES"])
+    if os.getenv("ALLOW_ORDER_PLACEMENT"):
+        live["allow_order_placement"] = os.environ["ALLOW_ORDER_PLACEMENT"].strip().lower() == "true"
