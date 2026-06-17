@@ -11,6 +11,7 @@
       <div>
         <h1>Cross Regime Alpha Options Overlay</h1>
         <p>Mode: Live Validation</p>
+        <p id="refreshStatus" class="refresh-status">Auto refresh every 30 minutes</p>
       </div>
       <button id="refresh">Refresh</button>
     </header>
@@ -81,6 +82,31 @@
           <thead><tr><th>Ticker</th><th>Allowed</th><th>Reason Codes</th><th>Position Multiplier</th><th>Notes</th></tr></thead>
           <tbody id="risk"></tbody>
         </table>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <div>
+            <h2>Recommendation History</h2>
+            <p>Persisted SQLite records from generated strategy recommendations.</p>
+          </div>
+          <span id="recommendationCount" class="count-pill">0 records</span>
+        </div>
+        <div class="history-layout">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Time</th><th>Ticker</th><th>Sector</th><th>Contract</th><th>Score</th><th>Type</th></tr></thead>
+              <tbody id="recommendations"></tbody>
+            </table>
+          </div>
+          <div>
+            <h3>Sector Counts</h3>
+            <table>
+              <thead><tr><th>Sector</th><th>Count</th><th>Avg Score</th></tr></thead>
+              <tbody id="recommendationSectors"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <section>

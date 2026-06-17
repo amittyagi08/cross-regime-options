@@ -35,6 +35,10 @@ manual_validation:
   journal_path: "data/validation_journal.csv"
   require_pre_trade_notes: true
 
+recommendation_logging:
+  enabled: true
+  database_path: "data/option_alpha.db"
+
 ibkr:
   host: "127.0.0.1"
   port: 7496

@@ -4,6 +4,9 @@ async function fetchJson(url, options) {
   return response.json();
 }
 
+const AUTO_REFRESH_MS = 30 * 60 * 1000;
+let refreshInProgress = false;
+
 function fmt(value, digits = 2) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "number") return value.toFixed(digits);
@@ -173,7 +176,54 @@ async function loadJournal() {
   `);
 }
 
-document.getElementById("refresh").addEventListener("click", () => loadSnapshot(true));
+async function loadRecommendations() {
+  const [recommendations, sectors] = await Promise.all([
+    fetchJson("/api/recommendations?limit=50"),
+    fetchJson("/api/recommendations/sectors")
+  ]);
+  document.getElementById("recommendationCount").textContent = `${recommendations.length} ${recommendations.length === 1 ? "record" : "records"}`;
+  setRows("recommendations", recommendations, row => `
+    <tr title="${row.notes || ""}">
+      <td>${row.timestamp || "-"}</td>
+      <td>${row.ticker || "-"}</td>
+      <td>${row.sector || "-"}</td>
+      <td>${row.option_symbol || "-"}</td>
+      <td>${fmt(row.recommendation_score)}</td>
+      <td>${row.recommendation_type || "-"}</td>
+    </tr>
+  `);
+  setRows("recommendationSectors", sectors, row => `
+    <tr>
+      <td>${row.sector || "-"}</td>
+      <td>${fmt(row.recommendation_count, 0)}</td>
+      <td>${fmt(row.average_score)}</td>
+    </tr>
+  `);
+}
+
+async function refreshDashboard(refreshSnapshot = false, source = "manual") {
+  if (refreshInProgress) return;
+  const refreshButton = document.getElementById("refresh");
+  const refreshStatus = document.getElementById("refreshStatus");
+  refreshInProgress = true;
+  refreshButton.disabled = true;
+  refreshStatus.textContent = source === "auto" ? "Auto refresh running..." : "Refresh running...";
+  try {
+    await loadSnapshot(refreshSnapshot);
+    await loadRecommendations();
+    refreshStatus.textContent = `Last ${source} refresh: ${new Date().toLocaleString()}`;
+  } catch (error) {
+    refreshStatus.textContent = `Refresh failed: ${new Date().toLocaleString()}`;
+    throw error;
+  } finally {
+    refreshInProgress = false;
+    refreshButton.disabled = false;
+  }
+}
+
+document.getElementById("refresh").addEventListener("click", () => {
+  refreshDashboard(true, "manual").catch(error => console.error(error));
+});
 document.getElementById("journalForm").addEventListener("submit", async event => {
   event.preventDefault();
   const form = new FormData(event.target);
@@ -190,5 +240,8 @@ document.getElementById("journalForm").addEventListener("submit", async event =>
   await loadJournal();
 });
 
-loadSnapshot(false).catch(error => console.error(error));
+refreshDashboard(false, "initial").catch(error => console.error(error));
 loadJournal().catch(error => console.error(error));
+setInterval(() => {
+  refreshDashboard(true, "auto").catch(error => console.error(error));
+}, AUTO_REFRESH_MS);

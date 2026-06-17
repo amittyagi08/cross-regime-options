@@ -25,6 +25,9 @@ IBConnect.py
 output/*
 !output/.gitkeep
 data/cache/
+data/*.db
+data/*.db-journal
+.tmp/
 *.log
 
 # OS/editor noise

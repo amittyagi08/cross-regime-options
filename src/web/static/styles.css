@@ -33,6 +33,12 @@ p {
   margin: 0;
 }
 
+.refresh-status {
+  color: #9ca3af;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
 main {
   margin: 0 auto;
   max-width: 1280px;
@@ -216,6 +222,18 @@ section {
   padding: 18px;
 }
 
+.history-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+}
+
+h3 {
+  color: #cbd5e1;
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
 button {
   background: #2563eb;
   border: 0;
@@ -224,6 +242,11 @@ button {
   cursor: pointer;
   font-weight: 700;
   padding: 10px 14px;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .score-button {
@@ -375,6 +398,7 @@ textarea {
   .topbar,
   .summary,
   .section-heading,
+  .history-layout,
   .journal {
     display: block;
   }

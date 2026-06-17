@@ -19,6 +19,11 @@ from src.live.signal_snapshot import (
     SectorSignal,
     StockSignal,
 )
+from src.recommendation_logging import (
+    log_snapshot_recommendations,
+    recommendation_db_path,
+    recommendation_logging_enabled,
+)
 from src.sector_rotation.sector_config import load_sector_etfs, load_sector_map
 from src.sector_rotation.sector_scoring import calculate_sector_scores
 from src.sector_rotation.stock_scoring import calculate_stock_scores
@@ -38,6 +43,9 @@ class LiveSignalService:
         print("Data provider: Yahoo. Data may be delayed or incomplete. Validate on trading platform before any trade.")
         try:
             snapshot = self._build_snapshot()
+            if recommendation_logging_enabled(self.config):
+                count = log_snapshot_recommendations(snapshot, recommendation_db_path(self.config))
+                _append_log(f"recommendations_logged:{count}", self.config)
             if bool(self.config.get("live", {}).get("save_snapshots", True)):
                 save_snapshot(snapshot, self.config)
             print("scan_completed")
