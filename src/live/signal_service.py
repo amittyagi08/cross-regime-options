@@ -46,7 +46,7 @@ class LiveSignalService:
             snapshot = self._build_snapshot()
             if recommendation_logging_enabled(self.config):
                 db_path = recommendation_db_path(self.config)
-                count = log_snapshot_recommendations(snapshot, db_path)
+                count = log_snapshot_recommendations(snapshot, db_path, self.config)
                 _append_log(f"recommendations_logged:{count}", self.config)
                 lifecycle = refresh_open_recommendations(snapshot, db_path, self.config)
                 _append_log(

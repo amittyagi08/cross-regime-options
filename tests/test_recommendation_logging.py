@@ -10,9 +10,11 @@ from src.api.app import create_app
 from src.live.signal_snapshot import LiveSignalSnapshot, OptionSignal, RiskDecision, SectorSignal, StockSignal
 from src.live.recommendation_lifecycle import refresh_open_recommendations
 from src.recommendation_logging import (
+    approve_recommendation,
     get_recommendation,
     list_closed_recommendations,
     list_open_recommendations,
+    list_review_required_recommendations,
     list_recommendations,
     log_snapshot_recommendations,
     sector_recommendation_counts,
@@ -61,30 +63,50 @@ def test_log_snapshot_recommendations_persists_option_context():
     assert rows[0]["stock_rank"] == 2
     assert rows[0]["right"] == "CALL"
     assert rows[0]["recommendation_type"] == "BUY_CALL"
-    assert rows[0]["status"] == "OPEN"
-    assert rows[0]["entry_price"] == 6.2
-    assert rows[0]["current_price"] == 6.2
-    assert rows[0]["opened_at"] == "2026-06-17T09:15:00-05:00"
+    assert rows[0]["status"] == "REVIEW_REQUIRED"
+    assert rows[0]["entry_price"] is None
+    assert rows[0]["current_price"] is None
+    assert rows[0]["opened_at"] is None
     assert rows[0]["market_regime"] == "risk-on"
 
 
-def test_log_snapshot_recommendations_skips_duplicate_active_open_idea():
+def test_approve_recommendation_creates_open_paper_trade():
     db_path = _test_db_path()
     snapshot = _amd_snapshot(score=92.5)
-    changed_score_snapshot = _amd_snapshot(score=95.0, as_of="2026-06-17T09:45:00-05:00")
 
     assert log_snapshot_recommendations(snapshot, str(db_path)) == 1
-    assert log_snapshot_recommendations(changed_score_snapshot, str(db_path)) == 1
+    review_rows = list_review_required_recommendations(str(db_path))
+    approved = approve_recommendation(
+        str(db_path),
+        review_rows[0]["id"],
+        approved_at="2026-06-17T09:20:00-05:00",
+        latest_notes="Manual approval test.",
+    )
 
     open_rows = list_open_recommendations(str(db_path))
+    assert approved["status"] == "OPEN"
     assert len(open_rows) == 1
     assert open_rows[0]["option_symbol"] == "AMD260717C180"
-    assert len(list_recommendations(str(db_path))) == 2
+    assert open_rows[0]["entry_price"] == 6.2
+    assert open_rows[0]["opened_at"] == "2026-06-17T09:20:00-05:00"
+
+
+def test_auto_open_can_only_happen_when_manual_approval_disabled():
+    db_path = _test_db_path()
+
+    assert log_snapshot_recommendations(
+        _amd_snapshot(score=92.5),
+        str(db_path),
+        {"paper_trading": {"auto_open_paper_trades": True, "require_manual_approval": False}},
+    ) == 1
+
+    assert len(list_open_recommendations(str(db_path))) == 1
 
 
 def test_refresh_open_recommendations_closes_profit_target():
     db_path = _test_db_path()
     log_snapshot_recommendations(_amd_snapshot(ask=5.0), str(db_path))
+    approve_recommendation(str(db_path), list_review_required_recommendations(str(db_path))[0]["id"])
 
     result = refresh_open_recommendations(
         _amd_snapshot(as_of="2026-06-18T09:15:00-05:00", bid=7.2, ask=7.4, mid=7.3),
@@ -103,6 +125,7 @@ def test_refresh_open_recommendations_closes_profit_target():
 def test_refresh_open_recommendations_closes_stop_loss():
     db_path = _test_db_path()
     log_snapshot_recommendations(_amd_snapshot(ask=5.0), str(db_path))
+    approve_recommendation(str(db_path), list_review_required_recommendations(str(db_path))[0]["id"])
 
     refresh_open_recommendations(
         _amd_snapshot(as_of="2026-06-18T09:15:00-05:00", bid=3.7, ask=3.9, mid=3.8),
@@ -118,6 +141,11 @@ def test_refresh_open_recommendations_closes_stop_loss():
 def test_refresh_open_recommendations_closes_max_holding_days():
     db_path = _test_db_path()
     log_snapshot_recommendations(_amd_snapshot(as_of="2026-06-17T09:15:00-05:00", ask=5.0), str(db_path))
+    approve_recommendation(
+        str(db_path),
+        list_review_required_recommendations(str(db_path))[0]["id"],
+        approved_at="2026-06-17T09:15:00-05:00",
+    )
 
     refresh_open_recommendations(
         _amd_snapshot(as_of="2026-06-23T09:15:00-05:00", bid=5.2, ask=5.4, mid=5.3),
@@ -221,6 +249,34 @@ def test_recommendation_api_lists_persisted_records():
 
     assert response.status_code == 200
     assert response.json()[0]["ticker"] == "LLY"
+
+
+def test_recommendation_api_requires_manual_approval_before_open():
+    db_path = _test_db_path()
+    log_snapshot_recommendations(_amd_snapshot(), str(db_path))
+    app = create_app(
+        {
+            "live": {"provider": "yahoo", "allow_order_placement": False},
+            "recommendation_logging": {"enabled": True, "database_path": str(db_path)},
+            "paper_trading": {"auto_open_paper_trades": False, "require_manual_approval": True},
+        }
+    )
+    client = TestClient(app)
+
+    review_response = client.get("/api/recommendations/review-required")
+    open_response = client.get("/api/recommendations/open")
+    approve_response = client.post(
+        f"/api/recommendations/{review_response.json()[0]['id']}/approve",
+        json={"entry_price": 6.2, "notes": "Manual approval test."},
+    )
+
+    assert review_response.status_code == 200
+    assert open_response.status_code == 200
+    assert len(review_response.json()) == 1
+    assert open_response.json() == []
+    assert approve_response.status_code == 200
+    assert approve_response.json()["recommendation"]["status"] == "OPEN"
+    assert client.get("/api/recommendations/open").json()[0]["ticker"] == "AMD"
 
 
 def _test_db_path() -> Path:

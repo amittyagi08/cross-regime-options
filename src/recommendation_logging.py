@@ -12,6 +12,9 @@ from src.utils import ensure_parent_dir
 
 
 DEFAULT_DB_PATH = "data/option_alpha.db"
+REVIEW_REQUIRED = "REVIEW_REQUIRED"
+OPEN = "OPEN"
+WATCH = "WATCH"
 
 
 @dataclass(frozen=True)
@@ -125,8 +128,12 @@ def initialize_recommendation_db(db_path: str = DEFAULT_DB_PATH) -> None:
         )
 
 
-def log_snapshot_recommendations(snapshot: LiveSignalSnapshot, db_path: str = DEFAULT_DB_PATH) -> int:
-    records = build_recommendation_records(snapshot)
+def log_snapshot_recommendations(
+    snapshot: LiveSignalSnapshot,
+    db_path: str = DEFAULT_DB_PATH,
+    config: dict | None = None,
+) -> int:
+    records = build_recommendation_records(snapshot, config=config)
     if not records:
         initialize_recommendation_db(db_path)
         return 0
@@ -179,7 +186,10 @@ def log_snapshot_recommendations(snapshot: LiveSignalSnapshot, db_path: str = DE
         return conn.total_changes - before
 
 
-def build_recommendation_records(snapshot: LiveSignalSnapshot) -> list[RecommendationRecord]:
+def build_recommendation_records(
+    snapshot: LiveSignalSnapshot,
+    config: dict | None = None,
+) -> list[RecommendationRecord]:
     stocks_by_ticker = {stock.ticker: stock for stock in snapshot.universe}
     sectors_by_name = {sector.sector: sector for sector in snapshot.sectors}
     risk_by_ticker = {risk.ticker: risk for risk in snapshot.risk}
@@ -191,6 +201,8 @@ def build_recommendation_records(snapshot: LiveSignalSnapshot) -> list[Recommend
         sector = sectors_by_name.get(stock.sector) if stock else None
         risk = risk_by_ticker.get(option.ticker)
         recommendation_type = "BUY_CALL" if risk and risk.allowed else "WATCH"
+        opens_automatically = _auto_open_paper_trades(config) and not _require_manual_approval(config)
+        status = OPEN if recommendation_type == "BUY_CALL" and opens_automatically else REVIEW_REQUIRED if recommendation_type == "BUY_CALL" else WATCH
         record = RecommendationRecord(
             timestamp=timestamp,
             ticker=option.ticker,
@@ -215,11 +227,11 @@ def build_recommendation_records(snapshot: LiveSignalSnapshot) -> list[Recommend
             bid=option.bid,
             ask=option.ask,
             mid=option.mid,
-            entry_price=option.ask if recommendation_type == "BUY_CALL" else None,
-            current_price=option.ask if recommendation_type == "BUY_CALL" else None,
-            status="OPEN" if recommendation_type == "BUY_CALL" else "WATCH",
-            opened_at=timestamp if recommendation_type == "BUY_CALL" else None,
-            underlying_entry_price=stock.last_price if stock and recommendation_type == "BUY_CALL" else None,
+            entry_price=option.ask if status == OPEN else None,
+            current_price=option.ask if status == OPEN else None,
+            status=status,
+            opened_at=timestamp if status == OPEN else None,
+            underlying_entry_price=stock.last_price if stock and status == OPEN else None,
             underlying_current_price=stock.last_price if stock else None,
             latest_notes=_recommendation_notes(option, stock, sector, risk),
         )
@@ -263,7 +275,24 @@ def get_recommendation(db_path: str, recommendation_id: int) -> dict[str, Any] |
 
 def list_open_recommendations(db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
     initialize_recommendation_db(db_path)
-    return _list_recommendations_by_status(db_path, "OPEN")
+    return _list_recommendations_by_status(db_path, OPEN)
+
+
+def list_review_required_recommendations(db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
+    initialize_recommendation_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        _configure_connection(conn)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM signal_snapshot
+            WHERE status = ?
+            ORDER BY recommendation_score DESC, timestamp DESC, id DESC
+            """,
+            (REVIEW_REQUIRED,),
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def list_closed_recommendations(db_path: str = DEFAULT_DB_PATH, limit: int = 100) -> list[dict[str, Any]]:
@@ -330,6 +359,57 @@ def update_open_recommendation_quote(
                 recommendation_id,
             ),
         )
+
+
+def approve_recommendation(
+    db_path: str,
+    recommendation_id: int,
+    *,
+    approved_at: str | None = None,
+    entry_price: float | None = None,
+    latest_notes: str | None = None,
+) -> dict[str, Any]:
+    initialize_recommendation_db(db_path)
+    approved_at = approved_at or datetime.now().astimezone().isoformat(timespec="seconds")
+    existing = get_recommendation(db_path, recommendation_id)
+    if existing is None:
+        raise ValueError("Recommendation not found")
+    if existing.get("status") != REVIEW_REQUIRED:
+        raise ValueError("Only REVIEW_REQUIRED recommendations can be approved")
+    if _active_open_exists(db_path, existing["ticker"], existing["option_symbol"]):
+        raise ValueError("An OPEN recommendation already exists for this ticker and contract")
+
+    approved_entry = entry_price if entry_price is not None else existing.get("ask") or existing.get("mid")
+    if approved_entry is None or float(approved_entry) <= 0:
+        raise ValueError("Approved recommendation needs a positive entry price")
+
+    with sqlite3.connect(db_path) as conn:
+        _configure_connection(conn)
+        conn.execute(
+            """
+            UPDATE signal_snapshot
+            SET status = ?,
+                opened_at = ?,
+                entry_price = ?,
+                current_price = ?,
+                underlying_entry_price = underlying_current_price,
+                latest_notes = COALESCE(?, latest_notes)
+            WHERE id = ? AND status = ?
+            """,
+            (
+                OPEN,
+                approved_at,
+                float(approved_entry),
+                float(approved_entry),
+                latest_notes,
+                recommendation_id,
+                REVIEW_REQUIRED,
+            ),
+        )
+    approved = get_recommendation(db_path, recommendation_id)
+    if approved is None:
+        raise ValueError("Approved recommendation could not be loaded")
+    return approved
 
 
 def close_recommendation(
@@ -440,17 +520,18 @@ def _downgrade_duplicate_open_records(
     active_pairs = {
         (str(row[0]).upper(), str(row[1]).upper())
         for row in conn.execute(
-            "SELECT ticker, option_symbol FROM signal_snapshot WHERE status = 'OPEN'"
+            "SELECT ticker, option_symbol FROM signal_snapshot WHERE status = ?",
+            (OPEN,),
         ).fetchall()
     }
     output = []
     for record in records:
         pair = (record.ticker.upper(), record.option_symbol.upper())
-        if record.status == "OPEN" and pair in active_pairs:
+        if record.status == OPEN and pair in active_pairs:
             output.append(
                 replace(
                     record,
-                    status="WATCH",
+                    status=WATCH,
                     entry_price=None,
                     current_price=None,
                     opened_at=None,
@@ -460,7 +541,7 @@ def _downgrade_duplicate_open_records(
             )
         else:
             output.append(record)
-            if record.status == "OPEN":
+            if record.status == OPEN:
                 active_pairs.add(pair)
     return output
 
@@ -492,6 +573,33 @@ def _return_pct(entry_price: float | None, current_price: float | None) -> float
     if entry_price is None or current_price is None or entry_price <= 0:
         return None
     return (float(current_price) - float(entry_price)) / float(entry_price)
+
+
+def _active_open_exists(db_path: str, ticker: str, option_symbol: str) -> bool:
+    with sqlite3.connect(db_path) as conn:
+        _configure_connection(conn)
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM signal_snapshot
+            WHERE upper(ticker) = upper(?)
+              AND upper(option_symbol) = upper(?)
+              AND status = ?
+            LIMIT 1
+            """,
+            (ticker, option_symbol, OPEN),
+        ).fetchone()
+    return row is not None
+
+
+def _auto_open_paper_trades(config: dict | None) -> bool:
+    paper = (config or {}).get("paper_trading", {})
+    return bool(paper.get("auto_open_paper_trades", paper.get("AUTO_OPEN_PAPER_TRADES", False)))
+
+
+def _require_manual_approval(config: dict | None) -> bool:
+    paper = (config or {}).get("paper_trading", {})
+    return bool(paper.get("require_manual_approval", paper.get("REQUIRE_MANUAL_APPROVAL", True)))
 
 
 def _configure_connection(conn: sqlite3.Connection) -> None:

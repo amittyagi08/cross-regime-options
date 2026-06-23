@@ -185,14 +185,27 @@ async function loadJournal() {
 }
 
 async function loadRecommendations() {
-  const [recommendations, openRows, closedRows, sectors] = await Promise.all([
+  const [recommendations, reviewRows, openRows, closedRows, sectors] = await Promise.all([
     fetchJson("/api/recommendations?limit=50"),
+    fetchJson("/api/recommendations/review-required"),
     fetchJson("/api/recommendations/open"),
     fetchJson("/api/recommendations/closed?limit=50"),
     fetchJson("/api/recommendations/sectors")
   ]);
   document.getElementById("recommendationCount").textContent = `${recommendations.length} ${recommendations.length === 1 ? "record" : "records"}`;
   renderBestRecommendation(openRows);
+  setRows("reviewRequiredRecommendations", reviewRows, row => `
+    <tr title="${row.latest_notes || row.notes || ""}">
+      <td>${row.ticker || "-"}</td>
+      <td>${row.option_symbol || "-"}</td>
+      <td>${money(row.ask || row.mid)}</td>
+      <td>${fmt(row.recommendation_score)}</td>
+      <td>${pct(spreadPct(row))}</td>
+      <td>${fmt(row.dte, 0)}</td>
+      <td>${row.latest_notes || row.notes || ""}</td>
+      <td><button class="score-button" type="button" onclick="approveRecommendation(${row.id}, ${Number(row.ask || row.mid || 0)})">Approve</button></td>
+    </tr>
+  `);
   setRows("openRecommendations", openRows, row => `
     <tr title="${row.latest_notes || row.notes || ""}">
       <td>${row.ticker || "-"}</td>
@@ -235,6 +248,18 @@ async function loadRecommendations() {
       <td>${fmt(row.average_score)}</td>
     </tr>
   `);
+}
+
+async function approveRecommendation(id, entryPrice) {
+  await fetchJson(`/api/recommendations/${id}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      entry_price: entryPrice,
+      notes: "Manually approved for paper trade."
+    })
+  });
+  await loadRecommendations();
 }
 
 function renderBestRecommendation(openRows) {
