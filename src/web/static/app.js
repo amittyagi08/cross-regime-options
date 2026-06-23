@@ -23,6 +23,14 @@ function money(value) {
   return `$${Number(value).toFixed(2)}`;
 }
 
+function daysSince(value) {
+  if (!value) return "-";
+  const opened = new Date(value);
+  if (Number.isNaN(opened.getTime())) return "-";
+  const ms = Date.now() - opened.getTime();
+  return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+}
+
 function spreadPct(row) {
   if (!row || !row.bid || !row.ask || !row.mid) return null;
   return (row.ask - row.bid) / row.mid;
@@ -177,11 +185,39 @@ async function loadJournal() {
 }
 
 async function loadRecommendations() {
-  const [recommendations, sectors] = await Promise.all([
+  const [recommendations, openRows, closedRows, sectors] = await Promise.all([
     fetchJson("/api/recommendations?limit=50"),
+    fetchJson("/api/recommendations/open"),
+    fetchJson("/api/recommendations/closed?limit=50"),
     fetchJson("/api/recommendations/sectors")
   ]);
   document.getElementById("recommendationCount").textContent = `${recommendations.length} ${recommendations.length === 1 ? "record" : "records"}`;
+  renderBestRecommendation(openRows);
+  setRows("openRecommendations", openRows, row => `
+    <tr title="${row.latest_notes || row.notes || ""}">
+      <td>${row.ticker || "-"}</td>
+      <td>${row.option_symbol || "-"}</td>
+      <td><span class="status-pill status-open">${row.status || "-"}</span></td>
+      <td>${money(row.entry_price)}</td>
+      <td>${money(row.current_price)}</td>
+      <td class="${Number(row.pnl_pct || 0) >= 0 ? "positive-text" : "negative-text"}">${pct(row.pnl_pct)}</td>
+      <td>${daysSince(row.opened_at)}</td>
+      <td>Target 40% / Stop -25%</td>
+      <td>${row.latest_notes || row.notes || ""}</td>
+    </tr>
+  `);
+  setRows("closedRecommendations", closedRows, row => `
+    <tr title="${row.latest_notes || row.notes || ""}">
+      <td>${row.ticker || "-"}</td>
+      <td>${row.option_symbol || "-"}</td>
+      <td>${money(row.entry_price)}</td>
+      <td>${money(row.close_price)}</td>
+      <td class="${Number(row.pnl_pct || 0) >= 0 ? "positive-text" : "negative-text"}">${pct(row.pnl_pct)}</td>
+      <td>${row.close_reason || "-"}</td>
+      <td>${row.opened_at || "-"}</td>
+      <td>${row.closed_at || "-"}</td>
+    </tr>
+  `);
   setRows("recommendations", recommendations, row => `
     <tr title="${row.notes || ""}">
       <td>${row.timestamp || "-"}</td>
@@ -189,7 +225,7 @@ async function loadRecommendations() {
       <td>${row.sector || "-"}</td>
       <td>${row.option_symbol || "-"}</td>
       <td>${fmt(row.recommendation_score)}</td>
-      <td>${row.recommendation_type || "-"}</td>
+      <td>${row.status || row.recommendation_type || "-"}</td>
     </tr>
   `);
   setRows("recommendationSectors", sectors, row => `
@@ -199,6 +235,28 @@ async function loadRecommendations() {
       <td>${fmt(row.average_score)}</td>
     </tr>
   `);
+}
+
+function renderBestRecommendation(openRows) {
+  const container = document.getElementById("bestRecommendation");
+  if (!openRows.length) {
+    container.innerHTML = `<div class="empty-state">No open recommendation is currently being tracked.</div>`;
+    return;
+  }
+  const best = [...openRows].sort((a, b) => Number(b.recommendation_score || 0) - Number(a.recommendation_score || 0))[0];
+  container.innerHTML = `
+    <article class="best-panel">
+      <div>
+        <span>Best Probability-of-Profit</span>
+        <strong>${best.ticker || "-"} ${best.option_symbol || ""}</strong>
+      </div>
+      <div><span>Score</span><strong>${fmt(best.recommendation_score)}</strong></div>
+      <div><span>Entry Ask</span><strong>${money(best.entry_price)}</strong></div>
+      <div><span>Current</span><strong>${money(best.current_price)}</strong></div>
+      <div><span>PnL</span><strong class="${Number(best.pnl_pct || 0) >= 0 ? "positive-text" : "negative-text"}">${pct(best.pnl_pct)}</strong></div>
+      <div><span>Days Open</span><strong>${daysSince(best.opened_at)}</strong></div>
+    </article>
+  `;
 }
 
 async function refreshDashboard(refreshSnapshot = false, source = "manual") {

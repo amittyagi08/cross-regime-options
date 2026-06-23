@@ -3,12 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
 from src.live.signal_snapshot import LiveSignalSnapshot, OptionSignal, RiskDecision, SectorSignal, StockSignal
+from src.live.recommendation_lifecycle import refresh_open_recommendations
 from src.recommendation_logging import (
     get_recommendation,
+    list_closed_recommendations,
+    list_open_recommendations,
     list_recommendations,
     log_snapshot_recommendations,
     sector_recommendation_counts,
@@ -57,7 +61,72 @@ def test_log_snapshot_recommendations_persists_option_context():
     assert rows[0]["stock_rank"] == 2
     assert rows[0]["right"] == "CALL"
     assert rows[0]["recommendation_type"] == "BUY_CALL"
+    assert rows[0]["status"] == "OPEN"
+    assert rows[0]["entry_price"] == 6.2
+    assert rows[0]["current_price"] == 6.2
+    assert rows[0]["opened_at"] == "2026-06-17T09:15:00-05:00"
     assert rows[0]["market_regime"] == "risk-on"
+
+
+def test_log_snapshot_recommendations_skips_duplicate_active_open_idea():
+    db_path = _test_db_path()
+    snapshot = _amd_snapshot(score=92.5)
+    changed_score_snapshot = _amd_snapshot(score=95.0, as_of="2026-06-17T09:45:00-05:00")
+
+    assert log_snapshot_recommendations(snapshot, str(db_path)) == 1
+    assert log_snapshot_recommendations(changed_score_snapshot, str(db_path)) == 1
+
+    open_rows = list_open_recommendations(str(db_path))
+    assert len(open_rows) == 1
+    assert open_rows[0]["option_symbol"] == "AMD260717C180"
+    assert len(list_recommendations(str(db_path))) == 2
+
+
+def test_refresh_open_recommendations_closes_profit_target():
+    db_path = _test_db_path()
+    log_snapshot_recommendations(_amd_snapshot(ask=5.0), str(db_path))
+
+    result = refresh_open_recommendations(
+        _amd_snapshot(as_of="2026-06-18T09:15:00-05:00", bid=7.2, ask=7.4, mid=7.3),
+        str(db_path),
+        {"exit": {"profit_target_pct": 0.40, "stop_loss_pct": -0.25, "max_holding_days": 5}},
+    )
+
+    closed_rows = list_closed_recommendations(str(db_path))
+    assert result.updated == 1
+    assert result.closed == 1
+    assert closed_rows[0]["close_reason"] == "profit_target"
+    assert closed_rows[0]["close_price"] == 7.2
+    assert closed_rows[0]["pnl_pct"] == pytest.approx(0.44)
+
+
+def test_refresh_open_recommendations_closes_stop_loss():
+    db_path = _test_db_path()
+    log_snapshot_recommendations(_amd_snapshot(ask=5.0), str(db_path))
+
+    refresh_open_recommendations(
+        _amd_snapshot(as_of="2026-06-18T09:15:00-05:00", bid=3.7, ask=3.9, mid=3.8),
+        str(db_path),
+        {"exit": {"profit_target_pct": 0.40, "stop_loss_pct": -0.25, "max_holding_days": 5}},
+    )
+
+    closed_rows = list_closed_recommendations(str(db_path))
+    assert closed_rows[0]["close_reason"] == "stop_loss"
+    assert closed_rows[0]["pnl_pct"] == pytest.approx(-0.26)
+
+
+def test_refresh_open_recommendations_closes_max_holding_days():
+    db_path = _test_db_path()
+    log_snapshot_recommendations(_amd_snapshot(as_of="2026-06-17T09:15:00-05:00", ask=5.0), str(db_path))
+
+    refresh_open_recommendations(
+        _amd_snapshot(as_of="2026-06-23T09:15:00-05:00", bid=5.2, ask=5.4, mid=5.3),
+        str(db_path),
+        {"exit": {"profit_target_pct": 0.40, "stop_loss_pct": -0.25, "max_holding_days": 5}},
+    )
+
+    closed_rows = list_closed_recommendations(str(db_path))
+    assert closed_rows[0]["close_reason"] == "max_holding_days"
 
 
 def test_recommendation_queries_support_detail_and_sector_counts():
@@ -156,3 +225,42 @@ def test_recommendation_api_lists_persisted_records():
 
 def _test_db_path() -> Path:
     return Path("data") / f"test_option_alpha_{uuid4().hex}.db"
+
+
+def _amd_snapshot(
+    *,
+    as_of: str = "2026-06-17T09:15:00-05:00",
+    bid: float = 6.0,
+    ask: float = 6.2,
+    mid: float = 6.1,
+    score: float = 92.5,
+) -> LiveSignalSnapshot:
+    return LiveSignalSnapshot(
+        as_of=as_of,
+        provider="yahoo",
+        market_status="validation",
+        regime_status="risk-on",
+        sectors=[SectorSignal("2026-06-17", "Semiconductors", "SMH", 91.0, 1, True, 0.02, 0.08, 0.15)],
+        universe=[StockSignal("AMD", "Semiconductors", 88.0, 2, True, 180.0, 0.9)],
+        options=[
+            OptionSignal(
+                "AMD",
+                "AMD260717C180",
+                "20260717",
+                180.0,
+                "C",
+                bid,
+                ask,
+                mid,
+                0.56,
+                0.03,
+                -0.08,
+                0.21,
+                0.37,
+                2400,
+                30,
+                score,
+            )
+        ],
+        risk=[RiskDecision("AMD", True, ["RISK_ALLOWED"], 0.85, "Manual validation required.")],
+    )

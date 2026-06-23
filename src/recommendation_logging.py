@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
@@ -36,6 +36,22 @@ class RecommendationRecord:
     market_regime: str | None
     recommendation_type: str
     notes: str
+    bid: float | None = None
+    ask: float | None = None
+    mid: float | None = None
+    entry_price: float | None = None
+    current_price: float | None = None
+    status: str = "WATCH"
+    opened_at: str | None = None
+    closed_at: str | None = None
+    close_price: float | None = None
+    close_reason: str | None = None
+    pnl: float | None = None
+    pnl_pct: float | None = None
+    underlying_entry_price: float | None = None
+    underlying_current_price: float | None = None
+    underlying_return_pct: float | None = None
+    latest_notes: str | None = None
     signal_hash: str = ""
 
 
@@ -80,10 +96,33 @@ def initialize_recommendation_db(db_path: str = DEFAULT_DB_PATH) -> None:
             """
         )
         _ensure_column(conn, "signal_snapshot", "signal_hash", "TEXT")
+        _ensure_column(conn, "signal_snapshot", "bid", "REAL")
+        _ensure_column(conn, "signal_snapshot", "ask", "REAL")
+        _ensure_column(conn, "signal_snapshot", "mid", "REAL")
+        _ensure_column(conn, "signal_snapshot", "entry_price", "REAL")
+        _ensure_column(conn, "signal_snapshot", "current_price", "REAL")
+        _ensure_column(conn, "signal_snapshot", "status", "TEXT NOT NULL DEFAULT 'WATCH'")
+        _ensure_column(conn, "signal_snapshot", "opened_at", "TEXT")
+        _ensure_column(conn, "signal_snapshot", "closed_at", "TEXT")
+        _ensure_column(conn, "signal_snapshot", "close_price", "REAL")
+        _ensure_column(conn, "signal_snapshot", "close_reason", "TEXT")
+        _ensure_column(conn, "signal_snapshot", "pnl", "REAL")
+        _ensure_column(conn, "signal_snapshot", "pnl_pct", "REAL")
+        _ensure_column(conn, "signal_snapshot", "underlying_entry_price", "REAL")
+        _ensure_column(conn, "signal_snapshot", "underlying_current_price", "REAL")
+        _ensure_column(conn, "signal_snapshot", "underlying_return_pct", "REAL")
+        _ensure_column(conn, "signal_snapshot", "latest_notes", "TEXT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_snapshot_timestamp ON signal_snapshot(timestamp)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_snapshot_ticker ON signal_snapshot(ticker)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signal_snapshot_sector ON signal_snapshot(sector)")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_snapshot_hash ON signal_snapshot(signal_hash)")
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_signal_snapshot_open_idea
+            ON signal_snapshot(ticker, option_symbol)
+            WHERE status = 'OPEN'
+            """
+        )
 
 
 def log_snapshot_recommendations(snapshot: LiveSignalSnapshot, db_path: str = DEFAULT_DB_PATH) -> int:
@@ -93,9 +132,10 @@ def log_snapshot_recommendations(snapshot: LiveSignalSnapshot, db_path: str = DE
         return 0
 
     initialize_recommendation_db(db_path)
-    rows = [_record_values(record) for record in records]
     with sqlite3.connect(db_path) as conn:
         _configure_connection(conn)
+        records = _downgrade_duplicate_open_records(conn, records)
+        rows = [_record_values(record) for record in records]
         before = conn.total_changes
         conn.executemany(
             """
@@ -120,9 +160,19 @@ def log_snapshot_recommendations(snapshot: LiveSignalSnapshot, db_path: str = DE
                 market_regime,
                 recommendation_type,
                 notes,
+                bid,
+                ask,
+                mid,
+                entry_price,
+                current_price,
+                status,
+                opened_at,
+                underlying_entry_price,
+                underlying_current_price,
+                latest_notes,
                 signal_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(signal_hash) DO NOTHING
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
             """,
             rows,
         )
@@ -162,6 +212,16 @@ def build_recommendation_records(snapshot: LiveSignalSnapshot) -> list[Recommend
             market_regime=snapshot.regime_status,
             recommendation_type=recommendation_type,
             notes=_recommendation_notes(option, stock, sector, risk),
+            bid=option.bid,
+            ask=option.ask,
+            mid=option.mid,
+            entry_price=option.ask if recommendation_type == "BUY_CALL" else None,
+            current_price=option.ask if recommendation_type == "BUY_CALL" else None,
+            status="OPEN" if recommendation_type == "BUY_CALL" else "WATCH",
+            opened_at=timestamp if recommendation_type == "BUY_CALL" else None,
+            underlying_entry_price=stock.last_price if stock and recommendation_type == "BUY_CALL" else None,
+            underlying_current_price=stock.last_price if stock else None,
+            latest_notes=_recommendation_notes(option, stock, sector, risk),
         )
         records.append(RecommendationRecord(**{**record.__dict__, "signal_hash": _signal_hash(record)}))
     return records
@@ -199,6 +259,119 @@ def get_recommendation(db_path: str, recommendation_id: int) -> dict[str, Any] |
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM signal_snapshot WHERE id = ?", (recommendation_id,)).fetchone()
     return dict(row) if row else None
+
+
+def list_open_recommendations(db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
+    initialize_recommendation_db(db_path)
+    return _list_recommendations_by_status(db_path, "OPEN")
+
+
+def list_closed_recommendations(db_path: str = DEFAULT_DB_PATH, limit: int = 100) -> list[dict[str, Any]]:
+    initialize_recommendation_db(db_path)
+    limit = max(1, min(int(limit), 1000))
+    with sqlite3.connect(db_path) as conn:
+        _configure_connection(conn)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM signal_snapshot
+            WHERE status IN ('CLOSED', 'EXPIRED')
+            ORDER BY closed_at DESC, timestamp DESC, id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def update_open_recommendation_quote(
+    db_path: str,
+    recommendation_id: int,
+    *,
+    bid: float | None,
+    ask: float | None,
+    mid: float | None,
+    current_price: float | None,
+    underlying_current_price: float | None,
+    latest_notes: str | None,
+) -> None:
+    existing = get_recommendation(db_path, recommendation_id)
+    if existing is None:
+        return
+    pnl, pnl_pct = _pnl(existing.get("entry_price"), current_price)
+    underlying_return_pct = _return_pct(existing.get("underlying_entry_price"), underlying_current_price)
+    with sqlite3.connect(db_path) as conn:
+        _configure_connection(conn)
+        conn.execute(
+            """
+            UPDATE signal_snapshot
+            SET bid = ?,
+                ask = ?,
+                mid = ?,
+                current_price = ?,
+                underlying_current_price = ?,
+                underlying_return_pct = ?,
+                pnl = ?,
+                pnl_pct = ?,
+                latest_notes = ?
+            WHERE id = ? AND status = 'OPEN'
+            """,
+            (
+                bid,
+                ask,
+                mid,
+                current_price,
+                underlying_current_price,
+                underlying_return_pct,
+                pnl,
+                pnl_pct,
+                latest_notes,
+                recommendation_id,
+            ),
+        )
+
+
+def close_recommendation(
+    db_path: str,
+    recommendation_id: int,
+    *,
+    closed_at: str,
+    close_price: float,
+    close_reason: str,
+    latest_notes: str | None = None,
+) -> None:
+    existing = get_recommendation(db_path, recommendation_id)
+    if existing is None:
+        return
+    pnl, pnl_pct = _pnl(existing.get("entry_price"), close_price)
+    with sqlite3.connect(db_path) as conn:
+        _configure_connection(conn)
+        conn.execute(
+            """
+            UPDATE signal_snapshot
+            SET status = ?,
+                closed_at = ?,
+                close_price = ?,
+                current_price = ?,
+                close_reason = ?,
+                pnl = ?,
+                pnl_pct = ?,
+                latest_notes = COALESCE(?, latest_notes)
+            WHERE id = ? AND status = 'OPEN'
+            """,
+            (
+                "EXPIRED" if close_reason == "expired" else "CLOSED",
+                closed_at,
+                close_price,
+                close_price,
+                close_reason,
+                pnl,
+                pnl_pct,
+                latest_notes,
+                recommendation_id,
+            ),
+        )
 
 
 def sector_recommendation_counts(db_path: str = DEFAULT_DB_PATH, limit: int = 20) -> list[dict[str, Any]]:
@@ -246,8 +419,79 @@ def _record_values(record: RecommendationRecord) -> tuple:
         record.market_regime,
         record.recommendation_type,
         record.notes,
+        record.bid,
+        record.ask,
+        record.mid,
+        record.entry_price,
+        record.current_price,
+        record.status,
+        record.opened_at,
+        record.underlying_entry_price,
+        record.underlying_current_price,
+        record.latest_notes,
         record.signal_hash,
     )
+
+
+def _downgrade_duplicate_open_records(
+    conn: sqlite3.Connection,
+    records: list[RecommendationRecord],
+) -> list[RecommendationRecord]:
+    active_pairs = {
+        (str(row[0]).upper(), str(row[1]).upper())
+        for row in conn.execute(
+            "SELECT ticker, option_symbol FROM signal_snapshot WHERE status = 'OPEN'"
+        ).fetchall()
+    }
+    output = []
+    for record in records:
+        pair = (record.ticker.upper(), record.option_symbol.upper())
+        if record.status == "OPEN" and pair in active_pairs:
+            output.append(
+                replace(
+                    record,
+                    status="WATCH",
+                    entry_price=None,
+                    current_price=None,
+                    opened_at=None,
+                    underlying_entry_price=None,
+                    latest_notes=f"Duplicate active open idea already tracked. {record.latest_notes or record.notes}",
+                )
+            )
+        else:
+            output.append(record)
+            if record.status == "OPEN":
+                active_pairs.add(pair)
+    return output
+
+
+def _list_recommendations_by_status(db_path: str, status: str) -> list[dict[str, Any]]:
+    with sqlite3.connect(db_path) as conn:
+        _configure_connection(conn)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM signal_snapshot
+            WHERE status = ?
+            ORDER BY opened_at DESC, timestamp DESC, id DESC
+            """,
+            (status,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _pnl(entry_price: float | None, current_price: float | None) -> tuple[float | None, float | None]:
+    if entry_price is None or current_price is None or entry_price <= 0:
+        return None, None
+    pnl = float(current_price) - float(entry_price)
+    return pnl, pnl / float(entry_price)
+
+
+def _return_pct(entry_price: float | None, current_price: float | None) -> float | None:
+    if entry_price is None or current_price is None or entry_price <= 0:
+        return None
+    return (float(current_price) - float(entry_price)) / float(entry_price)
 
 
 def _configure_connection(conn: sqlite3.Connection) -> None:

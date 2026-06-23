@@ -228,6 +228,53 @@ section {
   grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
 }
 
+.best-recommendation {
+  margin-bottom: 14px;
+}
+
+.best-panel {
+  align-items: stretch;
+  background: #0f172a;
+  border: 1px solid #047857;
+  border-radius: 6px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(90px, 1fr));
+  padding: 12px;
+}
+
+.best-panel span {
+  color: #94a3b8;
+  display: block;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.best-panel strong {
+  color: #f8fafc;
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.lifecycle-table {
+  margin-bottom: 16px;
+}
+
+.status-open {
+  background: #064e3b;
+  color: #a7f3d0;
+}
+
+.positive-text {
+  color: #86efac;
+  font-weight: 700;
+}
+
+.negative-text {
+  color: #fda4af;
+  font-weight: 700;
+}
+
 h3 {
   color: #cbd5e1;
   font-size: 14px;
@@ -398,6 +445,7 @@ textarea {
   .topbar,
   .summary,
   .section-heading,
+  .best-panel,
   .history-layout,
   .journal {
     display: block;

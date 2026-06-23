@@ -11,6 +11,7 @@ import yfinance as yf
 from src.black_scholes import calculate_call_greeks
 from src.live.live_config import assert_live_safety
 from src.live.live_data_provider import LiveDataProvider
+from src.live.recommendation_lifecycle import refresh_open_recommendations
 from src.live.signal_snapshot import (
     LiveSignalSnapshot,
     OptionDiagnostic,
@@ -44,8 +45,14 @@ class LiveSignalService:
         try:
             snapshot = self._build_snapshot()
             if recommendation_logging_enabled(self.config):
-                count = log_snapshot_recommendations(snapshot, recommendation_db_path(self.config))
+                db_path = recommendation_db_path(self.config)
+                count = log_snapshot_recommendations(snapshot, db_path)
                 _append_log(f"recommendations_logged:{count}", self.config)
+                lifecycle = refresh_open_recommendations(snapshot, db_path, self.config)
+                _append_log(
+                    f"recommendations_lifecycle:inspected={lifecycle.inspected},updated={lifecycle.updated},closed={lifecycle.closed}",
+                    self.config,
+                )
             if bool(self.config.get("live", {}).get("save_snapshots", True)):
                 save_snapshot(snapshot, self.config)
             print("scan_completed")
