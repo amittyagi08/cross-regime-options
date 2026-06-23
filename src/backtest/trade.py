@@ -23,3 +23,22 @@ class BacktestTrade:
     pnl: float | None
     pnl_pct: float | None
     holding_days: int | None
+    entry_signal_score: float | None = None
+    exit_signal_score: float | None = None
+    daily_score: float | None = None
+    score_60m: float | None = None
+    score_5m: float | None = None
+    position_size_multiplier: float = 1.0
+    sector: str | None = None
+    sector_etf: str | None = None
+    sector_score: float | None = None
+    stock_score: float | None = None
+    risk_size_multiplier: float = 1.0
+    partial_profit_taken: bool = False
+    partial_exit_date: date | None = None
+    partial_exit_price: float | None = None
+    partial_pnl: float = 0.0
+    remaining_contracts: float | int | None = None
+    highest_option_price: float | None = None
+    runner_stop_price: float | None = None
+    risk_exit_reason: str | None = None

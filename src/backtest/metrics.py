@@ -21,6 +21,7 @@ def calculate_backtest_metrics(trades: list[BacktestTrade], initial_capital: flo
             "best_trade": 0.0,
             "worst_trade": 0.0,
             "ending_capital": initial_capital,
+            "return_pct": 0.0,
         }
 
     pnls = [float(trade.pnl) for trade in closed]
@@ -34,12 +35,13 @@ def calculate_backtest_metrics(trades: list[BacktestTrade], initial_capital: flo
         equity += pnl
         equity_values.append(equity)
 
+    total_pnl = sum(pnls)
     return {
         "total_trades": len(closed),
         "winning_trades": len(wins),
         "losing_trades": len(losses),
         "win_rate": len(wins) / len(closed),
-        "total_pnl": sum(pnls),
+        "total_pnl": total_pnl,
         "average_pnl": sum(pnls) / len(pnls),
         "average_win": sum(wins) / len(wins) if wins else 0.0,
         "average_loss": sum(losses) / len(losses) if losses else 0.0,
@@ -48,7 +50,8 @@ def calculate_backtest_metrics(trades: list[BacktestTrade], initial_capital: flo
         "average_holding_days": _average([trade.holding_days or 0 for trade in closed]),
         "best_trade": max(pnls),
         "worst_trade": min(pnls),
-        "ending_capital": initial_capital + sum(pnls),
+        "ending_capital": initial_capital + total_pnl,
+        "return_pct": total_pnl / initial_capital if initial_capital else 0.0,
     }
 
 

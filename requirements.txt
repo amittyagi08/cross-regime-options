@@ -6,3 +6,6 @@ PyYAML
 pytest
 yfinance
 scipy
+fastapi
+uvicorn
+httpx
