@@ -1,6 +1,15 @@
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
-  if (!response.ok) throw new Error(`${url} failed`);
+  if (!response.ok) {
+    let detail = `${url} failed`;
+    try {
+      const payload = await response.json();
+      detail = payload.detail || detail;
+    } catch {
+      detail = `${url} failed with ${response.status}`;
+    }
+    throw new Error(detail);
+  }
   return response.json();
 }
 
@@ -21,6 +30,23 @@ function pct(value) {
 function money(value) {
   if (value === null || value === undefined || value === "") return "-";
   return `$${Number(value).toFixed(2)}`;
+}
+
+function reviewNote(row) {
+  return row?.notes || row?.latest_notes || "";
+}
+
+function lifecycleNote(row) {
+  return row?.latest_notes || row?.notes || "";
+}
+
+function expiryDate(value) {
+  if (!value) return "-";
+  const text = String(value);
+  if (/^\d{8}$/.test(text)) {
+    return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+  }
+  return text;
 }
 
 function daysSince(value) {
@@ -185,29 +211,38 @@ async function loadJournal() {
 }
 
 async function loadRecommendations() {
-  const [recommendations, reviewRows, openRows, closedRows, sectors] = await Promise.all([
+  const [recommendations, reviewRows, openRows, markRows, sectors] = await Promise.all([
     fetchJson("/api/recommendations?limit=50"),
     fetchJson("/api/recommendations/review-required"),
-    fetchJson("/api/recommendations/open"),
-    fetchJson("/api/recommendations/closed?limit=50"),
+    fetchJson("/api/paper-trades/open"),
+    fetchJson("/api/paper-trades/marks?limit=50"),
     fetchJson("/api/recommendations/sectors")
   ]);
   document.getElementById("recommendationCount").textContent = `${recommendations.length} ${recommendations.length === 1 ? "record" : "records"}`;
-  renderBestRecommendation(openRows);
+  renderBestRecommendation(reviewRows, openRows);
   setRows("reviewRequiredRecommendations", reviewRows, row => `
-    <tr title="${row.latest_notes || row.notes || ""}">
+    <tr title="${row.latest_notes && row.latest_notes !== row.notes ? `Lifecycle/admin note: ${row.latest_notes}` : reviewNote(row)}">
       <td>${row.ticker || "-"}</td>
-      <td>${row.option_symbol || "-"}</td>
-      <td>${money(row.ask || row.mid)}</td>
+      <td>${row.option_symbol || "-"}${Number(row.alternate_contract_count || 0) > 1 ? ` (+${Number(row.alternate_contract_count) - 1})` : ""}</td>
+      <td>${expiryDate(row.expiry)}</td>
+      <td>${money(row.suggested_limit_price || row.ask || row.mid)}</td>
+      <td>${pct(row.profit_target_pct)}</td>
+      <td>${pct(row.stop_loss_pct)}</td>
+      <td>${row.time_stop_rule || "-"}</td>
+      <td>${row.entry_trigger || "-"}</td>
+      <td>${money(row.max_dollar_risk)}</td>
       <td>${fmt(row.recommendation_score)}</td>
       <td>${pct(spreadPct(row))}</td>
       <td>${fmt(row.dte, 0)}</td>
-      <td>${row.latest_notes || row.notes || ""}</td>
-      <td><button class="score-button" type="button" onclick="approveRecommendation(${row.id}, ${Number(row.ask || row.mid || 0)})">Approve</button></td>
+      <td>${reviewNote(row)}</td>
+      <td class="action-cell">
+        <button class="score-button" type="button" onclick="approveRecommendation(${row.id}, ${Number(row.suggested_limit_price || row.ask || row.mid || 0)}, ${Number(row.plan_complete || 0)})">Approve</button>
+        <button class="score-button reject-button" type="button" onclick="rejectRecommendation(${row.id})">Reject</button>
+      </td>
     </tr>
   `);
   setRows("openRecommendations", openRows, row => `
-    <tr title="${row.latest_notes || row.notes || ""}">
+    <tr title="${lifecycleNote(row)}">
       <td>${row.ticker || "-"}</td>
       <td>${row.option_symbol || "-"}</td>
       <td><span class="status-pill status-open">${row.status || "-"}</span></td>
@@ -215,30 +250,32 @@ async function loadRecommendations() {
       <td>${money(row.current_price)}</td>
       <td class="${Number(row.pnl_pct || 0) >= 0 ? "positive-text" : "negative-text"}">${pct(row.pnl_pct)}</td>
       <td>${daysSince(row.opened_at)}</td>
-      <td>Target 40% / Stop -25%</td>
-      <td>${row.latest_notes || row.notes || ""}</td>
+      <td>${row.lifecycle_state || "OPEN"}</td>
+      <td>${money(row.stop_price)}</td>
+      <td>${lifecycleNote(row)}</td>
     </tr>
   `);
-  setRows("closedRecommendations", closedRows, row => `
-    <tr title="${row.latest_notes || row.notes || ""}">
+  setRows("paperTradeMarks", markRows, row => `
+    <tr title="${row.notes || ""}">
+      <td>${row.marked_at || "-"}</td>
       <td>${row.ticker || "-"}</td>
       <td>${row.option_symbol || "-"}</td>
-      <td>${money(row.entry_price)}</td>
-      <td>${money(row.close_price)}</td>
+      <td>${money(row.current_price)}</td>
       <td class="${Number(row.pnl_pct || 0) >= 0 ? "positive-text" : "negative-text"}">${pct(row.pnl_pct)}</td>
-      <td>${row.close_reason || "-"}</td>
-      <td>${row.opened_at || "-"}</td>
-      <td>${row.closed_at || "-"}</td>
+      <td>${row.lifecycle_state || "-"}</td>
+      <td>${row.exit_signal || "-"}</td>
+      <td>${row.signal_reason || "-"}</td>
     </tr>
   `);
   setRows("recommendations", recommendations, row => `
-    <tr title="${row.notes || ""}">
+    <tr title="${lifecycleNote(row)}">
       <td>${row.timestamp || "-"}</td>
       <td>${row.ticker || "-"}</td>
-      <td>${row.sector || "-"}</td>
       <td>${row.option_symbol || "-"}</td>
       <td>${fmt(row.recommendation_score)}</td>
       <td>${row.status || row.recommendation_type || "-"}</td>
+      <td>${row.lifecycle_state || "-"}</td>
+      <td class="${Number(row.pnl_pct || 0) >= 0 ? "positive-text" : "negative-text"}">${pct(row.pnl_pct)}</td>
     </tr>
   `);
   setRows("recommendationSectors", sectors, row => `
@@ -250,36 +287,80 @@ async function loadRecommendations() {
   `);
 }
 
-async function approveRecommendation(id, entryPrice) {
-  await fetchJson(`/api/recommendations/${id}/approve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      entry_price: entryPrice,
-      notes: "Manually approved for paper trade."
-    })
-  });
-  await loadRecommendations();
-}
-
-function renderBestRecommendation(openRows) {
-  const container = document.getElementById("bestRecommendation");
-  if (!openRows.length) {
-    container.innerHTML = `<div class="empty-state">No open recommendation is currently being tracked.</div>`;
+async function approveRecommendation(id, entryPrice, planComplete = 0) {
+  const reviewNotes = window.prompt("Approval review notes", "Validated contract, premium, spread, and chart setup.");
+  if (reviewNotes === null) return;
+  if (!reviewNotes.trim()) {
+    alert("Approval requires review notes.");
     return;
   }
-  const best = [...openRows].sort((a, b) => Number(b.recommendation_score || 0) - Number(a.recommendation_score || 0))[0];
+  let overrideReason = "";
+  if (!planComplete) {
+    overrideReason = window.prompt("Incomplete plan override reason", "manual_override") || "";
+    if (!overrideReason.trim()) {
+      alert("Incomplete plans require an override reason.");
+      return;
+    }
+  }
+  try {
+    await fetchJson(`/api/recommendations/${id}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entry_price: entryPrice,
+        review_notes: reviewNotes.trim(),
+        override_reason: overrideReason.trim(),
+        notes: `Manually approved for paper trade. Review: ${reviewNotes.trim()}`
+      })
+    });
+    await loadRecommendations();
+  } catch (error) {
+    alert(error.message || "Approval failed.");
+    await loadRecommendations();
+  }
+}
+
+async function rejectRecommendation(id) {
+  const reason = window.prompt("Reject reason", "manual_reject");
+  if (reason === null) return;
+  try {
+    await fetchJson(`/api/recommendations/${id}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reason: reason.trim() || "manual_reject",
+        notes: `Rejected during manual review: ${reason.trim() || "manual_reject"}`
+      })
+    });
+    await loadRecommendations();
+  } catch (error) {
+    alert(error.message || "Rejection failed.");
+    await loadRecommendations();
+  }
+}
+
+function renderBestRecommendation(reviewRows, openRows) {
+  const container = document.getElementById("bestRecommendation");
+  const bestPending = [...reviewRows].sort((a, b) => Number(b.recommendation_score || 0) - Number(a.recommendation_score || 0))[0];
+  const bestOpen = [...openRows].sort((a, b) => Number(b.recommendation_score || 0) - Number(a.recommendation_score || 0))[0];
+  const best = bestPending || bestOpen;
+  if (!best) {
+    container.innerHTML = `<div class="empty-state">No current candidate or open paper trade is available.</div>`;
+    return;
+  }
+  const pending = Boolean(bestPending);
   container.innerHTML = `
     <article class="best-panel">
       <div>
-        <span>Best Probability-of-Profit</span>
+        <span>${pending ? "Pending Approval" : "Best Open Paper Trade"}</span>
         <strong>${best.ticker || "-"} ${best.option_symbol || ""}</strong>
       </div>
+      <div><span>Expiry</span><strong>${expiryDate(best.expiry)}</strong></div>
       <div><span>Score</span><strong>${fmt(best.recommendation_score)}</strong></div>
-      <div><span>Entry Ask</span><strong>${money(best.entry_price)}</strong></div>
-      <div><span>Current</span><strong>${money(best.current_price)}</strong></div>
+      <div><span>${pending ? "Suggested Premium" : "Entry Ask"}</span><strong>${money(pending ? best.ask || best.mid : best.entry_price)}</strong></div>
+      <div><span>${pending ? "Spread" : "Current"}</span><strong>${pending ? pct(spreadPct(best)) : money(best.current_price)}</strong></div>
       <div><span>PnL</span><strong class="${Number(best.pnl_pct || 0) >= 0 ? "positive-text" : "negative-text"}">${pct(best.pnl_pct)}</strong></div>
-      <div><span>Days Open</span><strong>${daysSince(best.opened_at)}</strong></div>
+      <div><span>${pending ? "DTE" : "Days Open"}</span><strong>${pending ? fmt(best.dte, 0) : daysSince(best.opened_at)}</strong></div>
     </article>
   `;
 }

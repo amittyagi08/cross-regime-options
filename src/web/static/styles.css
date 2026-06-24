@@ -239,7 +239,7 @@ section {
   border-radius: 6px;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(90px, 1fr));
+  grid-template-columns: minmax(220px, 2fr) repeat(6, minmax(90px, 1fr));
   padding: 12px;
 }
 
@@ -301,6 +301,16 @@ button:disabled {
   color: #bfdbfe;
   font-size: 12px;
   padding: 5px 8px;
+}
+
+.reject-button {
+  background: #7f1d1d;
+  color: #fecaca;
+  margin-left: 6px;
+}
+
+.action-cell {
+  white-space: nowrap;
 }
 
 .score-detail-row td {
