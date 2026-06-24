@@ -138,6 +138,23 @@ def test_health_endpoint_reports_live_validation_mode():
     }
 
 
+def test_ultra_short_portal_shell_routes():
+    from fastapi.testclient import TestClient
+
+    client = TestClient(create_app({"live": {"provider": "yahoo", "allow_order_placement": False}}))
+    page = client.get("/ultra-short")
+    snapshot = client.get("/api/ultra-short/snapshot")
+
+    assert page.status_code == 200
+    assert "Ultra-Short Trade Lab" in page.text
+    assert snapshot.status_code == 200
+    payload = snapshot.json()
+    assert payload["status"] == "portal_shell"
+    assert payload["call_setups"] == []
+    assert payload["put_setups"] == []
+    assert "CALL_TRIGGERED" in payload["states"]
+
+
 def test_refresh_endpoint_falls_back_to_latest_snapshot(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
 

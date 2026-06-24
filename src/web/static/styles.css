@@ -19,6 +19,21 @@ body {
   padding: 18px 28px;
 }
 
+.top-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.nav-button {
+  background: #2563eb;
+  border-radius: 6px;
+  color: white;
+  font-weight: 700;
+  padding: 10px 14px;
+  text-decoration: none;
+}
+
 h1 {
   font-size: 24px;
   margin: 0 0 4px;
@@ -422,6 +437,11 @@ td {
 th {
   color: #a7b0c0;
   font-size: 12px;
+}
+
+.empty-table {
+  color: #94a3b8;
+  font-style: italic;
 }
 
 .journal {

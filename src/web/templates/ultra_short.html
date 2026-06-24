@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ultra-Short Trade Lab</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Ultra-Short Trade Lab</h1>
+        <p>Intraday to 1-2 day option trade plans</p>
+        <p id="ultraShortStatus" class="refresh-status">Portal shell</p>
+      </div>
+      <nav class="top-actions">
+        <a class="nav-button" href="/">Swing Dashboard</a>
+        <button id="refreshUltraShort">Refresh</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="notice">
+        <strong>Separate research portal.</strong>
+        Manual approval only. No live orders or automatic order placement.
+      </section>
+
+      <section class="summary">
+        <div><span>Mode</span><strong id="labMode">-</strong></div>
+        <div><span>As Of</span><strong id="labAsOf">-</strong></div>
+        <div><span>Market Mode</span><strong id="marketMode">-</strong></div>
+        <div><span>Next Phase</span><strong id="nextPhase">-</strong></div>
+      </section>
+
+      <section>
+        <div class="section-heading">
+          <div>
+            <h2>Market Bias</h2>
+            <p>SPY / QQQ / SMH bias, VWAP state, and call/put readiness.</p>
+          </div>
+        </div>
+        <div class="summary">
+          <div><span>Call Readiness</span><strong id="callReadiness">-</strong></div>
+          <div><span>Put Readiness</span><strong id="putReadiness">-</strong></div>
+          <div><span>Status</span><strong id="biasStatus">-</strong></div>
+          <div><span>Notes</span><strong id="biasNotes">-</strong></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Intraday Sector Ranking</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Rank</th><th>Sector</th><th>ETF</th><th>Today %</th><th>60m Trend</th><th>VWAP State</th><th>Relative Strength</th><th>Ultra-Short Bias</th></tr></thead>
+            <tbody id="intradaySectors"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Call Setups</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Ticker</th><th>Contract</th><th>Expiry</th><th>Suggested Premium</th><th>Delta</th><th>Spread</th><th>DTE</th><th>Setup State</th><th>Entry Trigger</th><th>Score</th><th>Action</th></tr></thead>
+            <tbody id="callSetups"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Put Setups</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Ticker</th><th>Contract</th><th>Expiry</th><th>Suggested Premium</th><th>Delta</th><th>Spread</th><th>DTE</th><th>Setup State</th><th>Entry Trigger</th><th>Score</th><th>Action</th></tr></thead>
+            <tbody id="putSetups"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Active Ultra-Short Trades</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Ticker</th><th>Contract</th><th>State</th><th>Entry</th><th>Current</th><th>PnL %</th><th>VWAP Invalidation</th><th>Stop</th><th>Exit Signal</th></tr></thead>
+            <tbody id="activeTrades"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Closed Ultra-Short Trades</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Ticker</th><th>Contract</th><th>Entry</th><th>Exit</th><th>PnL %</th><th>Exit Reason</th><th>Review Notes</th></tr></thead>
+            <tbody id="closedTrades"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Recent Ultra-Short Marks</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Marked</th><th>Ticker</th><th>Contract</th><th>Current</th><th>PnL %</th><th>Signal</th><th>Reason</th></tr></thead>
+            <tbody id="recentMarks"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/ultra_short.js"></script>
+  </body>
+</html>
