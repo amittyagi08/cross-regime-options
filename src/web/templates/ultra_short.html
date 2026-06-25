@@ -11,6 +11,7 @@
       <div>
         <h1>Ultra-Short Trade Lab</h1>
         <p>Intraday to 1-2 day option trade plans</p>
+        <p id="ultraShortRefreshStatus" class="refresh-status">Auto refresh every 30 minutes</p>
         <p id="ultraShortStatus" class="refresh-status">Portal shell</p>
       </div>
       <nav class="top-actions">
@@ -29,14 +30,14 @@
         <div><span>Mode</span><strong id="labMode">-</strong></div>
         <div><span>As Of</span><strong id="labAsOf">-</strong></div>
         <div><span>Market Mode</span><strong id="marketMode">-</strong></div>
-        <div><span>Next Phase</span><strong id="nextPhase">-</strong></div>
+        <div><span>Current Phase</span><strong id="nextPhase">-</strong></div>
       </section>
 
       <section>
         <div class="section-heading">
           <div>
             <h2>Market Bias</h2>
-            <p>SPY / QQQ / SMH bias, VWAP state, and call/put readiness.</p>
+            <p>Live snapshot regime, sector strength, and call/put readiness.</p>
           </div>
         </div>
         <div class="summary">
@@ -106,8 +107,21 @@
           </table>
         </div>
       </section>
+
+      <section>
+        <div class="section-heading">
+          <h2>Analytics</h2>
+          <button id="exportUltraShort">Export</button>
+        </div>
+        <div class="summary">
+          <div><span>Closed Trades</span><strong id="closedTradeCount">-</strong></div>
+          <div><span>Win Rate</span><strong id="winRate">-</strong></div>
+          <div><span>Total PnL</span><strong id="totalPnl">-</strong></div>
+          <div><span>Rejected Setups</span><strong id="rejectedSetups">-</strong></div>
+        </div>
+      </section>
     </main>
 
-    <script src="/static/ultra_short.js"></script>
+    <script src="/static/ultra_short.js?v=phase5-analytics"></script>
   </body>
 </html>
