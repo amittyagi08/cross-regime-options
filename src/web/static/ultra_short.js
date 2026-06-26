@@ -67,6 +67,7 @@ async function loadUltraShortPortal() {
       <td>${row.sector || "-"}</td>
       <td>${row.etf || "-"}</td>
       <td>${pct(row.today_return)}</td>
+      <td>${pct(row.one_day_return ?? row.one_day_return_pct)}</td>
       <td>${row.trend_60m || "-"}</td>
       <td>${row.vwap_state || "-"}</td>
       <td>${fmt(row.relative_strength)}</td>

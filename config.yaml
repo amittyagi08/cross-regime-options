@@ -43,6 +43,15 @@ paper_trading:
   auto_open_paper_trades: false
   require_manual_approval: true
 
+day_trading:
+  provider: "yahoo"
+  market_symbols:
+    - "SPY"
+    - "QQQ"
+  watchlist_path: "data/live_watchlist.csv"
+  max_trades_per_day: 3
+  daily_loss_limit: -300
+
 ibkr:
   host: "127.0.0.1"
   port: 7496

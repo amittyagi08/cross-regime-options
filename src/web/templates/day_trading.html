@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Day Trading Dashboard</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Day Trading Dashboard</h1>
+        <p>VWAP, pivots, market status, and same-day setup scoring</p>
+        <p id="dayTradingRefreshStatus" class="refresh-status">Auto refresh every 5 minutes</p>
+        <p id="dayTradingStatus" class="refresh-status">Manual review only</p>
+      </div>
+      <nav class="top-actions">
+        <a class="nav-button" href="/">Swing Dashboard</a>
+        <a class="nav-button" href="/ultra-short">Ultra-Short Lab</a>
+        <button id="refreshDayTrading">Refresh</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="notice">
+        <strong>Same-day research screen.</strong>
+        Yahoo intraday data is delayed/best-effort. No auto-ordering, no averaging down, and manual approval is required.
+      </section>
+
+      <section class="market-banner" id="marketBanner">
+        <div>
+          <span>Market Status</span>
+          <strong id="marketStatus">-</strong>
+        </div>
+        <div>
+          <span>Market Score</span>
+          <strong id="marketScore">-</strong>
+        </div>
+        <div>
+          <span>Provider</span>
+          <strong id="provider">-</strong>
+        </div>
+        <div>
+          <span>As Of</span>
+          <strong id="asOf">-</strong>
+        </div>
+      </section>
+
+      <section>
+        <h2>S&P 500 / Nasdaq Status</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Symbol</th><th>Status</th><th>Last</th><th>VWAP</th><th>VWAP State</th><th>VWAP Slope</th><th>Pivot</th><th>Trend</th><th>VWAP Dist</th><th>Score</th></tr></thead>
+            <tbody id="marketRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Pivot Map</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Symbol</th><th>Last</th><th>PP</th><th>R1</th><th>R2</th><th>R3</th><th>S1</th><th>S2</th><th>S3</th><th>Prev High</th><th>Prev Low</th><th>OR High</th><th>OR Low</th></tr></thead>
+            <tbody id="pivotRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Long Setups</h2>
+        <div class="table-scroll">
+          <table class="day-signal-table">
+            <thead><tr><th>Ticker</th><th>Direction</th><th>Setup</th><th>Market Confirmed</th><th>VWAP State</th><th>Pivot Level</th><th>Score</th><th>Entry Trigger</th><th>Stop</th><th>Target</th><th>Action</th></tr></thead>
+            <tbody id="longSetups"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Short Setups</h2>
+        <div class="table-scroll">
+          <table class="day-signal-table">
+            <thead><tr><th>Ticker</th><th>Direction</th><th>Setup</th><th>Market Confirmed</th><th>VWAP State</th><th>Pivot Level</th><th>Score</th><th>Entry Trigger</th><th>Stop</th><th>Target</th><th>Action</th></tr></thead>
+            <tbody id="shortSetups"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Active Day Trades</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Ticker</th><th>Direction</th><th>Entry</th><th>Stop</th><th>Target</th><th>State</th><th>PnL</th></tr></thead>
+            <tbody id="activeTrades"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Closed Day Trades</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Ticker</th><th>Direction</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Exit Reason</th></tr></thead>
+            <tbody id="closedTrades"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Daily Performance Summary</h2>
+        <div class="summary">
+          <div><span>Realized PnL</span><strong id="realizedPnl">-</strong></div>
+          <div><span>Open Risk</span><strong id="openRisk">-</strong></div>
+          <div><span>Trades Taken</span><strong id="tradesTaken">-</strong></div>
+          <div><span>Daily Loss Limit</span><strong id="dailyLossLimit">-</strong></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/day_trading.js"></script>
+  </body>
+</html>

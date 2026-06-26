@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.api.routes_day_trading import router as day_trading_router
 from src.api.routes_health import router as health_router
 from src.api.routes_journal import router as journal_router
 from src.api.routes_recommendations import router as recommendations_router
@@ -26,6 +27,7 @@ def create_app(config: dict | None = None) -> FastAPI:
     app.include_router(signals_router)
     app.include_router(recommendations_router)
     app.include_router(journal_router)
+    app.include_router(day_trading_router)
     app.include_router(ultra_short_router)
 
     @app.get("/", response_class=HTMLResponse)

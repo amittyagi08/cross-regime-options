@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 import pandas as pd
 
 from src.models import MomentumSignal
@@ -40,11 +42,14 @@ def test_build_candidates_from_yahoo_calls_computes_greeks():
         ]
     )
 
-    candidates = client._build_candidates_from_calls(signal, "2026-05-15", calls, CONFIG)
+    yahoo_expiry = (date.today() + timedelta(days=30)).isoformat()
+    ib_expiry = yahoo_expiry.replace("-", "")
+
+    candidates = client._build_candidates_from_calls(signal, yahoo_expiry, calls, CONFIG)
 
     assert len(candidates) == 1
     candidate = candidates[0]
-    assert candidate.expiry == "20260515"
+    assert candidate.expiry == ib_expiry
     assert candidate.mid == 5.0
     assert candidate.delta is not None
     assert candidate.theta is not None

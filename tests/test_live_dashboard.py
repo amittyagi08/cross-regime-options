@@ -32,7 +32,7 @@ from src.live.validation_journal import append_journal_entry, load_journal
 from src.api.app import create_app
 
 
-ULTRA_SHORT_NO_PUT_FETCH = {"ultra_short": {"fetch_put_contracts": False}}
+ULTRA_SHORT_NO_PUT_FETCH = {"ultra_short": {"fetch_put_contracts": False, "fetch_intraday_sector_bars": False}}
 
 
 def test_live_safety_rejects_order_placement():
@@ -218,7 +218,10 @@ def test_ultra_short_snapshot_reuses_live_snapshot_data():
         ],
     )
 
-    payload = build_ultra_short_snapshot({"ultra_short": {"max_put_setups": 4, "fetch_put_contracts": False}}, live_snapshot)
+    payload = build_ultra_short_snapshot(
+        {"ultra_short": {"max_put_setups": 4, "fetch_put_contracts": False, "fetch_intraday_sector_bars": False}},
+        live_snapshot,
+    )
 
     assert payload["status"] == "phase_5_live_snapshot"
     assert payload["market_bias"]["mode"] == "CALL_BIASED"
@@ -227,6 +230,47 @@ def test_ultra_short_snapshot_reuses_live_snapshot_data():
     assert payload["call_setups"][0]["setup_state"] in {"CALL_SETUP_FORMING", "CALL_TRIGGERED"}
     assert payload["put_setups"][0]["direction"] == "PUT"
     assert payload["put_setups"][0]["setup_state"] in {"PUT_WATCH", "PUT_SETUP_FORMING", "PUT_TRIGGERED"}
+
+
+def test_ultra_short_intraday_sector_ranking_prefers_current_etf_strength(monkeypatch):
+    monkeypatch.setattr(
+        "src.ultra_short.service._intraday_sector_market_data",
+        lambda sectors, config: {
+            "XBI": {
+                "today_return": 0.005,
+                "one_day_return": 0.018,
+                "trend_return": 0.001,
+                "trend_60m": "UP",
+                "vwap_state": "ABOVE_VWAP",
+            },
+            "SMH": {
+                "today_return": 0.025,
+                "one_day_return": 0.032,
+                "trend_return": 0.010,
+                "trend_60m": "UP",
+                "vwap_state": "ABOVE_VWAP",
+            },
+        },
+    )
+    live_snapshot = LiveSignalSnapshot(
+        as_of="2026-06-25T14:30:00",
+        provider="yahoo",
+        market_status="validation",
+        regime_status="risk-on",
+        sectors=[
+            SectorSignal("2026-06-25", "Biotech", "XBI", 95.0, 1, True, 0.08, 0.13, 0.22),
+            SectorSignal("2026-06-25", "Semiconductors", "SMH", 80.0, 2, True, 0.02, 0.05, 0.59),
+        ],
+        universe=[],
+        options=[],
+    )
+
+    payload = build_ultra_short_snapshot(ULTRA_SHORT_NO_PUT_FETCH, live_snapshot)
+
+    assert payload["intraday_sectors"][0]["etf"] == "SMH"
+    assert payload["intraday_sectors"][0]["today_return"] == 0.025
+    assert payload["intraday_sectors"][0]["one_day_return"] == 0.032
+    assert payload["intraday_sectors"][0]["vwap_state"] == "ABOVE_VWAP"
 
 
 def test_ultra_short_put_setup_uses_live_put_contract(monkeypatch):
@@ -254,7 +298,10 @@ def test_ultra_short_put_setup_uses_live_put_contract(monkeypatch):
 
     monkeypatch.setattr("src.ultra_short.service._best_live_put_option", fake_put_option)
 
-    payload = build_ultra_short_snapshot({"ultra_short": {"max_put_setups": 4}}, _phase3_live_snapshot())
+    payload = build_ultra_short_snapshot(
+        {"ultra_short": {"max_put_setups": 4, "fetch_intraday_sector_bars": False}},
+        _phase3_live_snapshot(),
+    )
     mrna_put = next(row for row in payload["put_setups"] if row["ticker"] == "MRNA")
 
     assert mrna_put["contract_symbol"] == "MRNA260717P00030000"
@@ -288,7 +335,10 @@ def test_contract_backed_put_watch_persists_as_review_required(monkeypatch, tmp_
         lambda stock, config: put_option if stock.ticker == "MRNA" else None,
     )
     db_path = str(tmp_path / "ultra_short.db")
-    snapshot = build_ultra_short_snapshot({"ultra_short": {"max_put_setups": 4}}, _phase3_live_snapshot())
+    snapshot = build_ultra_short_snapshot(
+        {"ultra_short": {"max_put_setups": 4, "fetch_intraday_sector_bars": False}},
+        _phase3_live_snapshot(),
+    )
 
     persist_ultra_short_snapshot(snapshot, db_path)
     put_row = next(row for row in list_review_required_candidates(db_path) if row["ticker"] == "MRNA")

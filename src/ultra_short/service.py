@@ -43,7 +43,7 @@ def build_ultra_short_snapshot(
         ).to_dict()
 
     market_bias = _market_bias(live_snapshot)
-    intraday_sectors = _intraday_sector_ranks(live_snapshot.sectors)
+    intraday_sectors = _intraday_sector_ranks(live_snapshot.sectors, config)
     call_setups = _call_setup_candidates(live_snapshot, market_bias, intraday_sectors, config)
     put_setups = _put_setup_candidates(live_snapshot, market_bias, intraday_sectors, config)
 
@@ -110,24 +110,47 @@ def _market_bias(snapshot: LiveSignalSnapshot) -> UltraShortMarketBias:
     )
 
 
-def _intraday_sector_ranks(sectors: list[SectorSignal]) -> list[IntradaySectorRank]:
+def _intraday_sector_ranks(sectors: list[SectorSignal], config: dict | None = None) -> list[IntradaySectorRank]:
     if not sectors:
         return []
+    config = config or {}
+    intraday_stats = _intraday_sector_market_data(sectors, config)
     benchmark_score = sum(sector.sector_score for sector in sectors) / len(sectors)
     rows = []
     for sector in sectors:
-        score = intraday_sector_score(sector, benchmark_score)
+        stats = intraday_stats.get(sector.etf)
+        if stats:
+            today_return = stats["today_return"]
+            one_day_return = stats.get("one_day_return")
+            trend_60m = stats["trend_60m"]
+            vwap_state = stats["vwap_state"]
+            score = _intraday_sector_score_from_market_data(
+                today_return,
+                stats["trend_return"],
+                vwap_state,
+                sector.sector_score,
+                benchmark_score,
+            )
+            bias_input_return = today_return
+        else:
+            score = intraday_sector_score(sector, benchmark_score)
+            today_return = round(sector.return_1w / 5.0, 4)
+            one_day_return = None
+            trend_60m = trend_label(sector.return_1w)
+            vwap_state = vwap_state_from_score(score)
+            bias_input_return = sector.return_1w
         rows.append(
             IntradaySectorRank(
                 rank=0,
                 sector=sector.sector,
                 etf=sector.etf,
-                today_return=round(sector.return_1w / 5.0, 4),
-                trend_60m=trend_label(sector.return_1w),
-                vwap_state=vwap_state_from_score(score),
+                today_return=round(today_return, 4),
+                trend_60m=trend_60m,
+                vwap_state=vwap_state,
                 relative_strength=round((sector.sector_score - benchmark_score) / 100.0, 4),
-                ultra_short_bias=sector_bias(score, sector.return_1w),
+                ultra_short_bias=sector_bias(score, bias_input_return),
                 intraday_sector_score=round(score, 2),
+                one_day_return=round(one_day_return, 4) if one_day_return is not None else None,
             )
         )
     rows = sorted(rows, key=lambda row: row.intraday_sector_score, reverse=True)
@@ -142,9 +165,175 @@ def _intraday_sector_ranks(sectors: list[SectorSignal]) -> list[IntradaySectorRa
             relative_strength=row.relative_strength,
             ultra_short_bias=row.ultra_short_bias,
             intraday_sector_score=row.intraday_sector_score,
+            one_day_return=row.one_day_return,
         )
         for index, row in enumerate(rows, start=1)
     ]
+
+
+def _intraday_sector_market_data(sectors: list[SectorSignal], config: dict) -> dict[str, dict]:
+    ultra_short = config.get("ultra_short", {})
+    if not bool(ultra_short.get("fetch_intraday_sector_bars", True)):
+        return {}
+    etfs = [sector.etf for sector in sectors if sector.etf]
+    if not etfs:
+        return {}
+    interval = str(ultra_short.get("sector_intraday_interval", "5m"))
+    period = str(ultra_short.get("sector_intraday_period", "1d"))
+    try:
+        raw = yf.download(
+            tickers=etfs,
+            period=period,
+            interval=interval,
+            group_by="ticker",
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+        )
+    except Exception as exc:
+        print(f"Yahoo intraday sector diagnostic error: {exc}")
+        return {}
+    if raw is None or raw.empty:
+        return {}
+    daily = _daily_sector_market_data(etfs)
+    return {
+        etf: stats
+        for etf in etfs
+        if (stats := _intraday_stats_for_etf(raw, etf, len(etfs), daily))
+    }
+
+
+def _daily_sector_market_data(etfs: list[str]) -> pd.DataFrame:
+    try:
+        return yf.download(
+            tickers=etfs,
+            period="5d",
+            interval="1d",
+            group_by="ticker",
+            auto_adjust=False,
+            progress=False,
+            threads=True,
+        )
+    except Exception as exc:
+        print(f"Yahoo daily sector diagnostic error: {exc}")
+        return pd.DataFrame()
+
+
+def _intraday_stats_for_etf(
+    raw: pd.DataFrame,
+    etf: str,
+    ticker_count: int,
+    daily: pd.DataFrame | None = None,
+) -> dict | None:
+    frame = _intraday_frame_for_etf(raw, etf, ticker_count)
+    if frame.empty or "Close" not in frame.columns:
+        return None
+    frame = frame.copy()
+    frame["Close"] = pd.to_numeric(frame["Close"], errors="coerce")
+    if "Volume" in frame.columns:
+        frame["Volume"] = pd.to_numeric(frame["Volume"], errors="coerce").fillna(0.0)
+    else:
+        frame["Volume"] = 0.0
+    frame = frame.dropna(subset=["Close"])
+    if len(frame) < 2:
+        return None
+
+    first_close = float(frame["Close"].iloc[0])
+    last_close = float(frame["Close"].iloc[-1])
+    if first_close <= 0:
+        return None
+    today_return = (last_close / first_close) - 1.0
+    previous_close = _previous_daily_close(daily, etf, ticker_count, frame.index[-1]) if daily is not None else None
+    one_day_return = (last_close / previous_close) - 1.0 if previous_close and previous_close > 0 else None
+    trend_bars = min(12, len(frame) - 1)
+    trend_base = float(frame["Close"].iloc[-1 - trend_bars])
+    trend_return = (last_close / trend_base) - 1.0 if trend_base > 0 else 0.0
+    vwap = _intraday_vwap(frame)
+    vwap_state = _intraday_vwap_state(last_close, vwap)
+    return {
+        "today_return": today_return,
+        "one_day_return": one_day_return,
+        "trend_return": trend_return,
+        "trend_60m": trend_label(trend_return),
+        "vwap_state": vwap_state,
+    }
+
+
+def _intraday_frame_for_etf(raw: pd.DataFrame, etf: str, ticker_count: int) -> pd.DataFrame:
+    if isinstance(raw.columns, pd.MultiIndex):
+        if etf in raw.columns.get_level_values(0):
+            return raw[etf].dropna(how="all")
+        if etf in raw.columns.get_level_values(-1):
+            return raw.xs(etf, axis=1, level=-1).dropna(how="all")
+        return pd.DataFrame()
+    if ticker_count == 1:
+        return raw.dropna(how="all")
+    return pd.DataFrame()
+
+
+def _previous_daily_close(
+    daily: pd.DataFrame,
+    etf: str,
+    ticker_count: int,
+    latest_intraday_index,
+) -> float | None:
+    frame = _intraday_frame_for_etf(daily, etf, ticker_count)
+    if frame.empty or "Close" not in frame.columns:
+        return None
+    close = pd.to_numeric(frame["Close"], errors="coerce").dropna()
+    if close.empty:
+        return None
+    latest_date = pd.Timestamp(latest_intraday_index).date()
+    prior_closes = close[close.index.map(lambda value: pd.Timestamp(value).date() < latest_date)]
+    if not prior_closes.empty:
+        return float(prior_closes.iloc[-1])
+    if len(close) >= 2:
+        return float(close.iloc[-2])
+    return None
+
+
+def _intraday_vwap(frame: pd.DataFrame) -> float:
+    close = frame["Close"]
+    high = pd.to_numeric(frame["High"], errors="coerce") if "High" in frame.columns else close
+    low = pd.to_numeric(frame["Low"], errors="coerce") if "Low" in frame.columns else close
+    typical_price = (high.fillna(close) + low.fillna(close) + close) / 3.0
+    volume = frame["Volume"]
+    volume_sum = float(volume.sum())
+    if volume_sum <= 0:
+        return float(close.iloc[-1])
+    return float((typical_price * volume).sum() / volume_sum)
+
+
+def _intraday_vwap_state(last_close: float, vwap: float) -> str:
+    if vwap <= 0:
+        return "NEAR_VWAP"
+    distance = (last_close / vwap) - 1.0
+    if distance >= 0.001:
+        return "ABOVE_VWAP"
+    if distance <= -0.001:
+        return "BELOW_VWAP"
+    return "NEAR_VWAP"
+
+
+def _intraday_sector_score_from_market_data(
+    today_return: float,
+    trend_return: float,
+    vwap_state: str,
+    sector_score: float,
+    benchmark_score: float,
+) -> float:
+    vwap_bonus = 8.0 if vwap_state == "ABOVE_VWAP" else -8.0 if vwap_state == "BELOW_VWAP" else 0.0
+    return max(
+        0.0,
+        min(
+            100.0,
+            50.0
+            + (today_return * 1200.0)
+            + (trend_return * 700.0)
+            + vwap_bonus
+            + ((sector_score - benchmark_score) * 0.10),
+        ),
+    )
 
 
 def _call_setup_candidates(

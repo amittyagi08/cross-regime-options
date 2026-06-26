@@ -16,6 +16,7 @@
       </div>
       <nav class="top-actions">
         <a class="nav-button" href="/">Swing Dashboard</a>
+        <a class="nav-button" href="/day-trading">Day Trading</a>
         <button id="refreshUltraShort">Refresh</button>
       </nav>
     </header>
@@ -52,7 +53,7 @@
         <h2>Intraday Sector Ranking</h2>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Rank</th><th>Sector</th><th>ETF</th><th>Today %</th><th>60m Trend</th><th>VWAP State</th><th>Relative Strength</th><th>Ultra-Short Bias</th></tr></thead>
+            <thead><tr><th>Rank</th><th>Sector</th><th>ETF</th><th>Intraday %</th><th>1 Day %</th><th>60m Trend</th><th>VWAP State</th><th>Relative Strength</th><th>Ultra-Short Bias</th></tr></thead>
             <tbody id="intradaySectors"></tbody>
           </table>
         </div>
@@ -122,6 +123,6 @@
       </section>
     </main>
 
-    <script src="/static/ultra_short.js?v=phase5-analytics"></script>
+    <script src="/static/ultra_short.js?v=phase5-intraday-one-day"></script>
   </body>
 </html>

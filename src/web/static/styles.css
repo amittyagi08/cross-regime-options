@@ -179,6 +179,70 @@ section {
   color: #fda4af;
 }
 
+.status-neutral {
+  background: #334155;
+  color: #cbd5e1;
+}
+
+.market-banner {
+  align-items: stretch;
+  background: #0f172a;
+  border-color: #334155;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.market-banner.status-allowed {
+  border-color: #047857;
+}
+
+.market-banner.status-blocked {
+  border-color: #be123c;
+}
+
+.market-banner.status-neutral {
+  border-color: #64748b;
+}
+
+.market-banner div {
+  background: #111827;
+  border: 1px solid #263247;
+  border-radius: 6px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.market-banner span {
+  color: #94a3b8;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.market-banner strong {
+  color: #f8fafc;
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.day-signal-table {
+  min-width: 1260px;
+}
+
+.day-signal-table th,
+.day-signal-table td {
+  white-space: nowrap;
+}
+
+.day-signal-table th:nth-child(8),
+.day-signal-table td:nth-child(8),
+.day-signal-table th:nth-child(9),
+.day-signal-table td:nth-child(9) {
+  min-width: 220px;
+  white-space: normal;
+}
+
 .contract-line {
   color: #dbeafe;
   font-size: 13px;
@@ -474,6 +538,7 @@ textarea {
 @media (max-width: 800px) {
   .topbar,
   .summary,
+  .market-banner,
   .section-heading,
   .best-panel,
   .history-layout,

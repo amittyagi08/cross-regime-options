@@ -35,6 +35,7 @@ class IntradaySectorRank:
     relative_strength: float
     ultra_short_bias: str
     intraday_sector_score: float
+    one_day_return: float | None = None
 
 
 @dataclass(frozen=True)
